@@ -1,0 +1,10 @@
+{
+  "dependencies": [
+    "boost-asio",
+    "fmt",
+    "glfw3",
+    "gtest",
+    "vulkan",
+    "immer"
+  ]
+}

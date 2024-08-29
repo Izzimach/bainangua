@@ -1,0 +1,5 @@
+if(EXISTS "D:/Gary/Documents/Projects/CloudSCM/Izzimach/bainangua/out/build/x64-debug/bainangua/GLFW_test[1]_tests.cmake")
+  include("D:/Gary/Documents/Projects/CloudSCM/Izzimach/bainangua/out/build/x64-debug/bainangua/GLFW_test[1]_tests.cmake")
+else()
+  add_test(GLFW_test_NOT_BUILT GLFW_test_NOT_BUILT)
+endif()

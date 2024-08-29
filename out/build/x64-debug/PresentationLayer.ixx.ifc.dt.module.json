@@ -1,0 +1,11 @@
+{
+    "Version": "1.1",
+    "Data": {
+        "Source": "d:\\gary\\documents\\projects\\cloudscm\\izzimach\\bainangua\\bainangua\\presentationlayer.ixx",
+        "ProvidedModule": "PresentationLayer",
+        "ImportedModules": [
+            "OuterBoilerplate"
+        ],
+        "ImportedHeaderUnits": []
+    }
+}
