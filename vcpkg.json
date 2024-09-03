@@ -1,6 +1,7 @@
 {
   "dependencies": [
     "boost-asio",
+    "boost-hana",
     "fmt",
     "glfw3",
     "gtest",

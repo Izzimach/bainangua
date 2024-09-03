@@ -1,17 +1,22 @@
-﻿
-#
+﻿#
 # test executable
 #
 
-add_executable(GLFW_test "tests/tests.cpp")
+find_package(fmt REQUIRED)
+find_package(immer REQUIRED)
+find_package(glfw3 REQUIRED)
+find_package(Vulkan REQUIRED)
+find_package(GTest REQUIRED)
+find_package(Boost REQUIRED)
 
-target_compile_features(GLFW_test PUBLIC cxx_std_20)
+add_executable(nangua_test "tests.cpp" "RowTypeTests.cpp")
+target_compile_features(nangua_test PUBLIC cxx_std_20)
 
-target_include_directories(GLFW_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(nangua_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(GLFW_test PRIVATE glfw)
-target_link_libraries(GLFW_test PRIVATE Vulkan::Vulkan)
-target_link_libraries(GLFW_test PRIVATE GTest::gtest_main)
-target_link_libraries(GLFW_test PRIVATE glfw_wrappers)
+target_link_libraries(nangua_test PRIVATE glfw)
+target_link_libraries(nangua_test PRIVATE Vulkan::Vulkan)
+target_link_libraries(nangua_test PRIVATE GTest::gtest_main)
+target_link_libraries(nangua_test PRIVATE bainangua)
 
-gtest_discover_tests(GLFW_test)
+gtest_discover_tests(nangua_test)

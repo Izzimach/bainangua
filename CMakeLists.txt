@@ -1,6 +1,7 @@
-﻿# CMakeList.txt : Top-level CMake project file, do global configuration
-# and include sub-projects here.
+﻿#
+# Root CMAKE file for bainangua
 #
+
 cmake_minimum_required (VERSION 3.20)
 
 
@@ -17,9 +18,14 @@ endif()
 
 project ("bainangua")
 
-# Include sub-projects.
+# library and example app
+
 add_subdirectory ("bainangua")
 
+
+# tests
+
 enable_testing()
+add_subdirectory("tests")
 
 

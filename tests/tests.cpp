@@ -1,6 +1,6 @@
 
 #include "gtest/gtest.h"
-#include "GLFW_X.hpp"
+#include "bainangua.hpp"
 
 import OuterBoilerplate;
 
@@ -18,7 +18,7 @@ TEST(Boilerplate, BasicTest)
 						VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
 				},
 				.useValidation = false,
-				.updateCallback = [](auto dt, auto s) { return false; }
+				.innerCode = [](auto s) { return false; }
 			}
 		)
 	);
