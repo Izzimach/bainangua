@@ -16,6 +16,11 @@ if (WIN32)
   add_definitions(-D_WIN32_WINNT=0x0A00)
 endif()
 
+
+#
+# main project and subdirectories
+#
+
 project ("bainangua")
 
 # library and example app

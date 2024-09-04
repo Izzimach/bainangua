@@ -64,7 +64,7 @@ uint32_t chooseSwapChainImageCount(const OuterBoilerplateState& boilerplate, con
 export
 class PresentationLayer
 {
-	PresentationLayer() : swapchain_() {}
+	PresentationLayer() {}
 	~PresentationLayer() { teardown(); }
 
 	void build(OuterBoilerplateState& boilerplate)
@@ -75,18 +75,19 @@ class PresentationLayer
 		auto useableModes = swapChainInfo.presentModes | filter([](vk::PresentModeKHR& s) {return s == vk::PresentModeKHR::eFifo; });
 
 		assert(!useableFormats.empty() && !useableModes.empty());
+		swapChainFormat_ = useableFormats.front().format;
 
-		uint32_t imageCount = chooseSwapChainImageCount(boilerplate, swapChainInfo);
-		vk::Extent2D imageExtent = chooseSwapChainImageExtent(boilerplate, swapChainInfo);
+		swapChainImageCount_ = chooseSwapChainImageCount(boilerplate, swapChainInfo);
+		swapChainExtent2D_ = chooseSwapChainImageExtent(boilerplate, swapChainInfo);
 		std::vector<uint32_t> queueFamilies;
 
 		vk::SwapchainCreateInfoKHR createInfo(
 			vk::SwapchainCreateFlagsKHR(),
 			boilerplate.vkSurface,
-			imageCount,
-			useableFormats.front().format,
+			swapChainImageCount_,
+			swapChainFormat_,
 			useableFormats.front().colorSpace,
-			imageExtent,
+			swapChainExtent2D_,
 			1,
 			vk::ImageUsageFlagBits::eColorAttachment,
 			vk::SharingMode::eExclusive,
@@ -95,21 +96,72 @@ class PresentationLayer
 			vk::CompositeAlphaFlagBitsKHR::eOpaque,
 			vk::PresentModeKHR::eFifo,
 			true);
-		swapchainDevice_ = boilerplate.vkDevice;
-		swapchain_ = boilerplate.vkDevice.createSwapchainKHR(createInfo);
+		swapChainDevice_ = boilerplate.vkDevice;
+		swapChain_ = boilerplate.vkDevice.createSwapchainKHR(createInfo);
+
+		// get swapchain images
+		uint32_t imageCount;
+		vkGetSwapchainImagesKHR(swapChainDevice_.value(), swapChain_.value(), &imageCount, nullptr);
+		std::vector<VkImage> swapChainImagesRaw(imageCount);
+		vkGetSwapchainImagesKHR(swapChainDevice_.value(), swapChain_.value(), &imageCount, swapChainImagesRaw.data());
+
+		// convert the from VkImage to vk::Image
+		swapChainImages_.resize(imageCount);
+		std::ranges::transform(swapChainImagesRaw, swapChainImages_.begin(),
+			[](VkImage v) { return vk::Image(v); });
+
+		swapChainImageViews_.resize(imageCount);
+		std::ranges::transform(swapChainImages_, swapChainImageViews_.begin(),
+			[&](vk::Image i) {
+				vk::ImageViewCreateInfo viewInfo({}, i, vk::ImageViewType::e2D, swapChainFormat_, vk::ComponentMapping(), vk::ImageSubresourceRange(vk::ImageAspectFlags(), 0, 1, 0, 1), nullptr);
+				return swapChainDevice_.value().createImageView(viewInfo);
+			});
+	}
+
+	void connectRenderPass(vk::RenderPass& renderPass)
+	{
+		teardownFramebuffers();
+		swapChainFramebuffers_.resize(swapChainImageCount_);
+		std::ranges::transform(swapChainImageViews_, swapChainFramebuffers_.begin(),
+			[&](vk::ImageView iv) {
+				vk::FramebufferCreateInfo framebufferInfo({}, renderPass, iv, swapChainExtent2D_.width, swapChainExtent2D_.height, 1);
+				return swapChainDevice_.value().createFramebuffer(framebufferInfo);
+			});
+	}
+
+	void teardownFramebuffers()
+	{
+		std::ranges::for_each(swapChainFramebuffers_,
+			[&](vk::Framebuffer f) {
+				swapChainDevice_.value().destroyFramebuffer(f);
+			});
+		swapChainFramebuffers_.clear();
 	}
 
 	void teardown()
 	{
-		if (swapchain_.has_value())
+		if (swapChainDevice_ && swapChain_)
 		{
-			swapchainDevice_.value().destroySwapchainKHR(swapchain_.value());
-			swapchain_.reset();
+			teardownFramebuffers();
+			std::ranges::for_each(swapChainImageViews_,
+				[&](vk::ImageView iv) {
+					swapChainDevice_.value().destroyImageView(iv);
+				});
+			swapChainImageViews_.clear();
+			swapChainDevice_.value().destroySwapchainKHR(swapChain_.value());
+			swapChain_.reset();
 		}
 	}
 	
 private:
-	std::optional<vk::Device> swapchainDevice_;
-	std::optional<vk::SwapchainKHR> swapchain_;
+	std::optional<vk::Device> swapChainDevice_;
+	std::optional<vk::SwapchainKHR> swapChain_;
+
+	std::vector<vk::Image> swapChainImages_;
+	std::vector<vk::ImageView> swapChainImageViews_;
+	std::vector<vk::Framebuffer> swapChainFramebuffers_;
+	vk::Format swapChainFormat_;
+	vk::Extent2D swapChainExtent2D_;
+	unsigned int swapChainImageCount_;
 };
 

@@ -19,12 +19,15 @@
 
 #include <fmt/format.h>
 
+#include "tanuki.hpp"
+
 import OuterBoilerplate;
 import PresentationLayer;
 import RowType;
 
 using namespace std;
 using namespace RowType;
+
 
 int main()
 {

@@ -17,7 +17,9 @@ find_package(boost_asio CONFIG REQUIRED)
 add_library(bainangua STATIC "OuterBoilerplate.ixx" "PresentationLayer.ixx")
 target_compile_features(bainangua PUBLIC cxx_std_20)
 
-target_include_directories(bainangua INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(bainangua INTERFACE
+	${CMAKE_CURRENT_SOURCE_DIR}
+	${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 target_link_libraries(bainangua PUBLIC glfw)
 target_link_libraries(bainangua PUBLIC immer)

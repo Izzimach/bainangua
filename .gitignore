@@ -399,3 +399,6 @@ FodyWeavers.xsd
 
 # vcpkg directory
 vcpkg_installed/
+
+# ninja build destination
+out/*
