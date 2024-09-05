@@ -402,3 +402,4 @@ vcpkg_installed/
 
 # ninja build destination
 out/*
+/vc140.idb
