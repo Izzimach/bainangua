@@ -14,7 +14,7 @@ find_package(boost_asio CONFIG REQUIRED)
 # basic library, used by the main executable and test executable
 #
 
-add_library(bainangua STATIC "OuterBoilerplate.ixx" "PresentationLayer.ixx")
+add_library(bainangua STATIC "OuterBoilerplate.ixx" "PresentationLayer.ixx" "Pipeline.ixx")
 target_compile_features(bainangua PUBLIC cxx_std_20)
 
 target_include_directories(bainangua INTERFACE
@@ -44,6 +44,25 @@ target_link_libraries(experimental_lib PUBLIC Vulkan::Vulkan)
 target_link_libraries(experimental_lib PUBLIC fmt::fmt)
 target_link_libraries(experimental_lib INTERFACE Boost::hana Boost::asio)
 
+#
+# shader compilation
+#
+
+add_custom_target(shaders ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/shaders)
+
+set(SHADER_FILES
+    shaders/Basic.vert
+    shaders/Basic.frag
+    )
+
+foreach (FILE ${SHADER_FILES})
+    add_custom_command(
+        TARGET shaders
+        COMMAND glslc ${CMAKE_CURRENT_SOURCE_DIR}/${FILE} -o ${CMAKE_CURRENT_BINARY_DIR}/$<PATH:REPLACE_EXTENSION,${FILE},$<JOIN:$<LIST:APPEND,$<PATH:GET_EXTENSION,${FILE}>,spv>,_>>
+        COMMENT "Compiling HLSL ${FILE}"
+        VERBATIM)
+endforeach (FILE)
 
 #
 # main executable
@@ -57,4 +76,5 @@ target_include_directories(white_pumpkin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(white_pumpkin PRIVATE Vulkan::Vulkan)
 target_link_libraries(white_pumpkin PRIVATE bainangua)
 
+add_dependencies(white_pumpkin shaders)
 
