@@ -1,8 +1,9 @@
 
 #include "gtest/gtest.h"
-#include "bainangua.hpp"
+#include "include/bainangua.hpp"
+#include "include/OuterBoilerplate.hpp"
 
-import OuterBoilerplate;
+using namespace bainangua;
 
 namespace {
 

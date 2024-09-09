@@ -14,12 +14,18 @@ find_package(boost_asio CONFIG REQUIRED)
 # basic library, used by the main executable and test executable
 #
 
-add_library(bainangua STATIC "OuterBoilerplate.ixx" "PresentationLayer.ixx" "Pipeline.ixx")
+add_library(bainangua STATIC "OuterBoilerplate.cpp" "PresentationLayer.cpp" "Pipeline.cpp")
 target_compile_features(bainangua PUBLIC cxx_std_20)
 
-target_include_directories(bainangua INTERFACE
+target_include_directories(bainangua PUBLIC
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    target_compile_options(bainangua PRIVATE /W4)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_compile_options(bainangua PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 target_link_libraries(bainangua PUBLIC glfw)
 target_link_libraries(bainangua PUBLIC immer)
@@ -32,7 +38,8 @@ target_link_libraries(bainangua INTERFACE Boost::hana Boost::asio)
 # experimental stuff
 #
 
-add_library(experimental_lib "RowType.ixx")
+add_library(experimental_lib "RowType.cpp")
+
 
 target_compile_features(experimental_lib PUBLIC cxx_std_20)
 
@@ -72,6 +79,13 @@ add_executable (white_pumpkin "white_pumpkin.cpp")
 target_compile_features(white_pumpkin PUBLIC cxx_std_20)
 
 target_include_directories(white_pumpkin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    target_compile_options(bainangua PRIVATE /W4)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_compile_options(bainangua PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 
 target_link_libraries(white_pumpkin PRIVATE Vulkan::Vulkan)
 target_link_libraries(white_pumpkin PRIVATE bainangua)

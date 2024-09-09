@@ -1,4 +1,4 @@
-module;
+
 
 #include <boost/hana/assert.hpp>
 #include <boost/hana/contains.hpp>
@@ -12,14 +12,9 @@ module;
 
 #include <fmt/format.h>
 
-
-
-export module RowType;
-
 namespace RowType {
 
-	export
-		template <typename Row, boost::hana::string FieldName, typename FieldType>
+	template <typename Row, boost::hana::string FieldName, typename FieldType>
 	concept has_named_field = requires (Row s) {
 		{ boost::hana::at_key(s, FieldName) } -> std::convertible_to<FieldType>;
 	};
@@ -57,8 +52,7 @@ namespace RowType {
 			std::make_index_sequence<sizeof(S::get()) - 1>{});
 	}
 
-	export
-		template<MakeArray A>
+	template<MakeArray A>
 	constexpr auto operator"" _field()
 	{
 		return prepare2([]() {                              \
@@ -70,7 +64,6 @@ namespace RowType {
 	}
 
 
-	export
 	template <boost::hana::string FieldName, typename T>
 		requires has_named_field<T, FieldName, std::string>
 	constexpr auto getRowField(const T& s)

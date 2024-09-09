@@ -7,9 +7,9 @@
 //
 //  This part specifically does NOT create a swapchain or handle any sort of memory allocation.
 //
-module;
 
 #include "bainangua.hpp"
+#include "OuterBoilerplate.hpp"
 
 #include <concepts>
 #include <vector>
@@ -23,11 +23,10 @@ module;
 
 #include <boost/asio.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/experimental/awaitable_operators.hpp>
 
 #include <fmt/format.h>
 
-export module OuterBoilerplate;
+namespace {
 
 struct ReturnObject {
     struct promise_type {
@@ -59,43 +58,20 @@ ReturnObject counter()
     }
 }
 
-export struct OuterBoilerplateState {
-    vk::Instance vkInstance;
-    GLFWwindow* glfwWindow;
-    vk::PhysicalDevice vkPhysicalDevice;
-    vk::Device vkDevice;
-    vk::Queue graphicsQueue;
-    vk::Queue presentQueue;
-    vk::SurfaceKHR vkSurface;
-
-    // your callback should call this at 'end-of-frame'
-    std::coroutine_handle<> endOfFrame;
-};
-
-export struct OuterBoilerplateConfig {
-	std::string AppName{ "Vulkan App" };
-	std::string EngineName{ "Default Vulkan Engine" };
-    std::vector<std::string> requiredExtensions;
-
-    bool useValidation;
-
-    std::function<bool(OuterBoilerplateState &)> innerCode;
-};
-
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageType,
+    VkDebugUtilsMessageSeverityFlagBitsEXT /*messageSeverity*/,
+    VkDebugUtilsMessageTypeFlagsEXT /*messageType*/,
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-    void* pUserData) {
+    void* /*pUserData*/) {
 
     fmt::print("Validation message: [{}]\n", pCallbackData->pMessage);
 
     return VK_FALSE;
 }
+}
 
+namespace bainangua {
 
-
-export 
 int outerBoilerplate(const OuterBoilerplateConfig& config)
 {
     glfwInit();
@@ -155,7 +131,7 @@ int outerBoilerplate(const OuterBoilerplateConfig& config)
     vk::Instance instance = vk::createInstance(instanceCreateInfo);
 
     // if we use validation, setup the debug callback
-    vk::DebugUtilsMessengerEXT messenger;
+    std::optional<VkDebugUtilsMessengerEXT> messenger;
     if (config.useValidation)
     {
         vk::DebugUtilsMessengerCreateInfoEXT debugMessengerInfo(
@@ -164,13 +140,10 @@ int outerBoilerplate(const OuterBoilerplateConfig& config)
             vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation,
             debugCallback
         );
-        VkDebugUtilsMessengerCreateInfoEXT* pDebugMessengerInfo = &static_cast<VkDebugUtilsMessengerCreateInfoEXT&>(debugMessengerInfo);
-        VkDebugUtilsMessengerEXT rawMessenger;
         auto debugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)instance.getProcAddr("vkCreateDebugUtilsMessengerEXT");
-        debugUtilsMessengerEXT(instance, &static_cast<VkDebugUtilsMessengerCreateInfoEXT&>(debugMessengerInfo), nullptr, &rawMessenger);
-
-        // put the messenger into our vk:: namespaced messenger value, which will be used later to destroy the messenger
-        messenger = rawMessenger;
+        VkDebugUtilsMessengerEXT messengerDeposit;
+        debugUtilsMessengerEXT(instance, &static_cast<VkDebugUtilsMessengerCreateInfoEXT&>(debugMessengerInfo), nullptr, &messengerDeposit);
+        messenger = messengerDeposit;
     }
 
     assert(glfwVulkanSupported());
@@ -187,7 +160,30 @@ int outerBoilerplate(const OuterBoilerplateConfig& config)
 
     // enumerate the physicalDevices
     std::vector<vk::PhysicalDevice> physicalDevices = instance.enumeratePhysicalDevices();
-    vk::PhysicalDevice physicalDevice = physicalDevices[0];
+
+    // filter out devices that don't support a swapchain
+    auto deviceSupportsSwapchain = [](vk::PhysicalDevice device) {
+            // check device extensions
+            std::vector<vk::ExtensionProperties> deviceProperties = device.enumerateDeviceExtensionProperties();
+            fmt::print("{} device properties supported\n", deviceProperties.size());
+            for (auto& prop : deviceProperties)
+            {
+                fmt::print("property: {}\n", prop.extensionName.operator std::string());
+            }
+            bool supportsSwapchain =
+                (std::ranges::find_if(deviceProperties,
+                    [](vk::ExtensionProperties p) {
+                        std::string e = p.extensionName;
+                        return e == std::string(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+                    }) != deviceProperties.end());
+            fmt::print("device supports swapchain = {}\n", supportsSwapchain);
+            return supportsSwapchain;
+        };
+
+    auto swapchainDevices = std::views::filter(physicalDevices, deviceSupportsSwapchain);
+    vk::PhysicalDevice physicalDevice = swapchainDevices.front();
+
+
 
     // get the QueueFamilyProperties of the first PhysicalDevice
     std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
@@ -223,9 +219,17 @@ int outerBoilerplate(const OuterBoilerplateConfig& config)
     }
     
     //
-    // create a Device (finally!)
+    // create a Logical Device (finally!)
     //
-    vk::Device device = physicalDevice.createDevice(vk::DeviceCreateInfo(vk::DeviceCreateFlags(), queues));
+    std::array<const char*, 0> layers;
+    std::vector<const char*> extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+    vk::DeviceCreateInfo deviceInfo(
+        vk::DeviceCreateFlags(),
+        queues,
+        layers,
+        extensions
+    );
+    vk::Device device = physicalDevice.createDevice(deviceInfo);
 
     // pull out the queues. They might be the same queue
     //
@@ -245,6 +249,9 @@ int outerBoilerplate(const OuterBoilerplateConfig& config)
     {
         OuterBoilerplateState vkState{instance, window, physicalDevice, device, graphicsQueue, presentQueue, surface, counter()};
         bool result = config.innerCode(vkState);
+        if (!result) {
+            fmt::print("inner code returned false\n");
+        }
     }
     catch (vk::SystemError& err)
     {
@@ -260,10 +267,10 @@ int outerBoilerplate(const OuterBoilerplateConfig& config)
     }
    
     // clean up debug callback
-    if (config.useValidation)
+    if (messenger.has_value())
     {
         auto destroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)instance.getProcAddr("vkDestroyDebugUtilsMessengerEXT");
-        destroyDebugUtilsMessengerEXT(instance, messenger, nullptr);
+        destroyDebugUtilsMessengerEXT(instance, messenger.value(), nullptr);
     }
 
     instance.destroySurfaceKHR(vk::SurfaceKHR(surface));
@@ -278,4 +285,7 @@ int outerBoilerplate(const OuterBoilerplateConfig& config)
     glfwTerminate();
 
     return 0;
+}
+
+
 }

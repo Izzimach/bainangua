@@ -6,6 +6,3 @@
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-#include <fmt/format.h>
-
-#include <functional>
