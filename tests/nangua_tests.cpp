@@ -110,15 +110,16 @@ TEST(OneFrame, BasicTest)
 			vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
 
 			bainangua::withCommandPool(s, poolInfo, [&](vk::CommandPool pool) {
-				std::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
-				vk::CommandBuffer oneBuffer = buffers[0];
+				std::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, bainangua::MultiFrameCount));
 				
 				size_t framesLeft = 10;
 
 				while (!glfwWindowShouldClose(s.glfwWindow) && framesLeft > 0) {
 
-					auto result = bainangua::drawOneFrame(s, presenter, oneBuffer, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
-						recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline);
+					size_t multiFrameIndex = framesLeft % bainangua::MultiFrameCount;
+
+					auto result = bainangua::drawOneFrame(s, presenter, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
+							recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline);
 						});
 					if (result != vk::Result::eSuccess) {
 						break;
@@ -129,6 +130,8 @@ TEST(OneFrame, BasicTest)
 					s.endOfFrame();
 					framesLeft--;
 				}
+				s.vkDevice.waitIdle();
+
 				});
 
 			bainangua::destroyPipeline(presenter, pipeline);

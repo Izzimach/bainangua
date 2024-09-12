@@ -6,9 +6,17 @@
 
 namespace bainangua {
 
-vk::Result drawOneFrame(const OuterBoilerplateState &s, const PresentationLayer& presenter, vk::CommandBuffer buffer, std::function<void(vk::CommandBuffer, vk::Framebuffer)> drawCommands)
+vk::Result drawOneFrame(const OuterBoilerplateState &s, const PresentationLayer& presenter, vk::CommandBuffer buffer, size_t multiFrameIndex, std::function<void(vk::CommandBuffer, vk::Framebuffer)> drawCommands)
 {
-	auto [acquireResult, imageIndex] = s.vkDevice.acquireNextImageKHR(presenter.swapChain_.value(), UINT64_MAX, presenter.imageAvailableSemaphore_, VK_NULL_HANDLE);
+	vk::Result waitResult = s.vkDevice.waitForFences(presenter.inFlightFences_[multiFrameIndex], vk::True, UINT64_MAX);
+	if (waitResult != vk::Result::eSuccess)
+	{
+		return waitResult;
+	}
+
+	s.vkDevice.resetFences(presenter.inFlightFences_[multiFrameIndex]);
+
+	auto [acquireResult, imageIndex] = s.vkDevice.acquireNextImageKHR(presenter.swapChain_.value(), UINT64_MAX, presenter.imageAvailableSemaphores_[multiFrameIndex], VK_NULL_HANDLE);
 	if (acquireResult != vk::Result::eSuccess)
 	{
 		return acquireResult;
@@ -18,11 +26,11 @@ vk::Result drawOneFrame(const OuterBoilerplateState &s, const PresentationLayer&
 	drawCommands(buffer, presenter.swapChainFramebuffers_[imageIndex]);
 
 	std::vector<vk::PipelineStageFlags> waitStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
-	vk::SubmitInfo submitInfo(presenter.imageAvailableSemaphore_, waitStages, buffer, presenter.renderFinishedSemaphore_);
-	s.graphicsQueue.submit(submitInfo, presenter.inFlightFence_);
+	vk::SubmitInfo submitInfo(presenter.imageAvailableSemaphores_[multiFrameIndex], waitStages, buffer, presenter.renderFinishedSemaphores_[multiFrameIndex]);
+	s.graphicsQueue.submit(submitInfo, presenter.inFlightFences_[multiFrameIndex]);
 
 	vk::PresentInfoKHR presentInfo(
-		presenter.renderFinishedSemaphore_,
+		presenter.renderFinishedSemaphores_[multiFrameIndex],
 		presenter.swapChain_.value(),
 		imageIndex,
 		nullptr
@@ -32,14 +40,6 @@ vk::Result drawOneFrame(const OuterBoilerplateState &s, const PresentationLayer&
 	{
 		return presentResult;
 	}
-
-	vk::Result waitResult = s.vkDevice.waitForFences(presenter.inFlightFence_, vk::True, UINT64_MAX);
-	if (waitResult != vk::Result::eSuccess)
-	{
-		return waitResult;
-	}
-
-	s.vkDevice.resetFences(presenter.inFlightFence_);
 
 	return vk::Result::eSuccess;
 }

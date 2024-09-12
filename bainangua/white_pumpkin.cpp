@@ -77,12 +77,12 @@ int main()
 				vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
 
 				bainangua::withCommandPool(s, poolInfo, [&presenter, &s, &pipeline](vk::CommandPool pool) {
-					std::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
-					vk::CommandBuffer oneBuffer = buffers[0];
+					std::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, bainangua::MultiFrameCount));
 
+					size_t multiFrameIndex = 0;
 					while (!glfwWindowShouldClose(s.glfwWindow)) {
 
-						auto result = bainangua::drawOneFrame(s, presenter, oneBuffer, [&presenter, &pipeline](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
+						auto result = bainangua::drawOneFrame(s, presenter, commandBuffers[multiFrameIndex], multiFrameIndex, [&presenter, &pipeline](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
 								recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline);
 							});
 						if (result != vk::Result::eSuccess) {
@@ -92,8 +92,13 @@ int main()
 						glfwPollEvents();
 
 						s.endOfFrame();
+
+						multiFrameIndex = (multiFrameIndex + 1) % bainangua::MultiFrameCount;
 					}
-					});
+
+					s.vkDevice.waitIdle();
+				});
+
 
 				bainangua::destroyPipeline(presenter, pipeline);
 

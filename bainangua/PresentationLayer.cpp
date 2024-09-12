@@ -112,9 +112,13 @@ void PresentationLayer::build(OuterBoilerplateState& boilerplate)
 			return swapChainDevice_.value().createImageView(viewInfo);
 		});
 
-	imageAvailableSemaphore_ = swapChainDevice_.value().createSemaphore({});
-	renderFinishedSemaphore_ = swapChainDevice_.value().createSemaphore({});
-	inFlightFence_ = swapChainDevice_.value().createFence({});
+	for (size_t index = 0; index < MultiFrameCount; index++) {
+		imageAvailableSemaphores_[index] = swapChainDevice_.value().createSemaphore({});
+		renderFinishedSemaphores_[index] = swapChainDevice_.value().createSemaphore({});
+
+		vk::FenceCreateInfo fenceInfo(vk::FenceCreateFlagBits::eSignaled);
+		inFlightFences_[index] = swapChainDevice_.value().createFence(fenceInfo);
+	}
 }
 
 void PresentationLayer::connectRenderPass(vk::RenderPass& renderPass)
@@ -141,9 +145,9 @@ void PresentationLayer::teardown()
 {
 	if (swapChainDevice_ && swapChain_)
 	{
-		swapChainDevice_.value().destroySemaphore(imageAvailableSemaphore_);
-		swapChainDevice_.value().destroySemaphore(renderFinishedSemaphore_);
-		swapChainDevice_.value().destroyFence(inFlightFence_);
+		std::ranges::for_each(imageAvailableSemaphores_, [&](auto s) { swapChainDevice_.value().destroySemaphore(s); });
+		std::ranges::for_each(renderFinishedSemaphores_, [&](auto s) { swapChainDevice_.value().destroySemaphore(s); });
+		std::ranges::for_each(inFlightFences_,           [&](auto f) { swapChainDevice_.value().destroyFence(f); });
 
 		teardownFramebuffers();
 

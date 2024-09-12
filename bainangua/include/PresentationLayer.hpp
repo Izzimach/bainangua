@@ -8,6 +8,8 @@
 
 namespace bainangua {
 
+constexpr uint32_t MultiFrameCount = 2;
+
 struct PresentationLayer
 {
 	PresentationLayer() {}
@@ -27,9 +29,9 @@ struct PresentationLayer
 
 	std::vector<vk::Framebuffer> swapChainFramebuffers_;
 
-	vk::Semaphore imageAvailableSemaphore_;
-	vk::Semaphore renderFinishedSemaphore_;
-	vk::Fence inFlightFence_;
+	std::array<vk::Semaphore, MultiFrameCount> imageAvailableSemaphores_;
+	std::array<vk::Semaphore, MultiFrameCount> renderFinishedSemaphores_;
+	std::array<vk::Fence, MultiFrameCount> inFlightFences_;
 
 private:
 
@@ -37,7 +39,6 @@ private:
 
 	std::vector<vk::Image> swapChainImages_;
 	std::vector<vk::ImageView> swapChainImageViews_;
-
 };
 
 }

@@ -8,7 +8,7 @@
 
 namespace bainangua {
 
-vk::Result drawOneFrame(const OuterBoilerplateState &s, const PresentationLayer &presenter, vk::CommandBuffer buffer, std::function<void(vk::CommandBuffer, vk::Framebuffer)> drawCommands);
+vk::Result drawOneFrame(const OuterBoilerplateState &s, const PresentationLayer &presenter, vk::CommandBuffer buffer, size_t multiFrameIndex, std::function<void(vk::CommandBuffer, vk::Framebuffer)> drawCommands);
 
 }
 

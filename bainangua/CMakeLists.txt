@@ -92,7 +92,6 @@ target_include_directories(white_pumpkin PRIVATE
     )
 
 
-
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     target_compile_options(bainangua PRIVATE /W4)
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -104,4 +103,3 @@ target_link_libraries(white_pumpkin PRIVATE Vulkan::Vulkan)
 target_link_libraries(white_pumpkin PRIVATE bainangua)
 
 add_dependencies(white_pumpkin shaders)
-
