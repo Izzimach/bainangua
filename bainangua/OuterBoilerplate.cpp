@@ -74,6 +74,8 @@ namespace bainangua {
 
 int outerBoilerplate(const OuterBoilerplateConfig& config)
 {
+    int runResult = 0;
+
     glfwInit();
 
     // what extensions are required by GLFW?
@@ -122,7 +124,7 @@ int outerBoilerplate(const OuterBoilerplateConfig& config)
     if (validationLayers.empty())
     {
         fmt::print("Vulkan layers do not contain VK_LAYER_KHRONOS_validation\n");
-        exit(-1);
+        return -1;
     }
 
     // create an Instance
@@ -247,7 +249,7 @@ int outerBoilerplate(const OuterBoilerplateConfig& config)
 
     try
     {
-        OuterBoilerplateState vkState{instance, window, physicalDevice, device, graphicsQueue, presentQueue, surface, counter()};
+        OuterBoilerplateState vkState{instance, window, physicalDevice, device, graphicsQueueFamilyIndex, graphicsQueue, presentQueueFamilyIndex.value(), presentQueue, surface, counter()};
         bool result = config.innerCode(vkState);
         if (!result) {
             fmt::print("inner code returned false\n");
@@ -256,14 +258,17 @@ int outerBoilerplate(const OuterBoilerplateConfig& config)
     catch (vk::SystemError& err)
     {
         fmt::print("vk::SystemError: {}\n", err.what());
+        runResult = -1;
     }
     catch (std::exception& err)
     {
         fmt::print("std::exception: {}\n", err.what());
+        runResult = -1;
     }
     catch (...)
     {
         fmt::print("unknown error!\n");
+        runResult = -1;
     }
    
     // clean up debug callback
@@ -284,7 +289,7 @@ int outerBoilerplate(const OuterBoilerplateConfig& config)
     glfwDestroyWindow(window);
     glfwTerminate();
 
-    return 0;
+    return runResult;
 }
 
 

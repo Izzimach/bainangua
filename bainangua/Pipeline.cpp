@@ -2,27 +2,25 @@
 // Code to assemble a Vulkan pipeline.
 // 
 
-
-#include <vector>
-#include <ranges>
-#include <optional>
-#include <filesystem>
-#include <boost/asio.hpp>
-
 #include "bainangua.hpp"
 #include "Pipeline.hpp"
 
+#include <boost/asio.hpp>
+#include <filesystem>
+#include <optional>
+#include <ranges>
+#include <vector>
+
 namespace {
 
-std::vector<char> readFile(const std::string& fileName)
+std::vector<char> readFile(std::filesystem::path filePath)
 {
-	std::filesystem::path filePath(fileName);
 	size_t fileSize = std::filesystem::file_size(filePath);
 
 	std::vector<char> dataBuffer(fileSize);
 
 	boost::asio::io_context io;
-	boost::asio::stream_file fileHandle(io, fileName, boost::asio::file_base::flags::read_only);
+	boost::asio::stream_file fileHandle(io, filePath.string(), boost::asio::file_base::flags::read_only);
 	size_t completedSize = boost::asio::read(fileHandle, boost::asio::buffer(dataBuffer.data(), fileSize));
 	assert(completedSize == fileSize);
 
@@ -46,7 +44,7 @@ vk::ShaderModule createShaderModule(vk::Device device, const std::vector<char>& 
 
 namespace bainangua {
 
-PipelineBundle createPipeline(const PresentationLayer &presentation, const std::string& vertexShaderFile, const std::string& fragmentShaderFile)
+PipelineBundle createPipeline(const PresentationLayer &presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
 	vk::Device device = presentation.swapChainDevice_.value();
 
@@ -56,19 +54,19 @@ PipelineBundle createPipeline(const PresentationLayer &presentation, const std::
 	vk::ShaderModule vertexShaderModule = createShaderModule(device, vertShaderCode);
 	vk::ShaderModule fragmentShaderModule = createShaderModule(device, fragShaderCode);
 
-	vk::PipelineShaderStageCreateInfo vertCreateInfo(
+	vk::PipelineShaderStageCreateInfo vertexCreateInfo(
 		{},
 		vk::ShaderStageFlagBits::eVertex,
 		vertexShaderModule,
 		"main"
 	);
-	vk::PipelineShaderStageCreateInfo fragCreateInfo(
+	vk::PipelineShaderStageCreateInfo fragmentCreateInfo(
 		{},
 		vk::ShaderStageFlagBits::eFragment,
 		fragmentShaderModule,
 		"main"
 	);
-	vk::PipelineShaderStageCreateInfo shaderStagesInfo[] = { vertCreateInfo, fragCreateInfo };
+	vk::PipelineShaderStageCreateInfo shaderStagesInfo[] = { vertexCreateInfo, fragmentCreateInfo };
 
 	std::vector<vk::DynamicState> dynamicStates = {
 		vk::DynamicState::eViewport,
@@ -109,7 +107,9 @@ PipelineBundle createPipeline(const PresentationLayer &presentation, const std::
 		vk::PolygonMode::eFill,
 		vk::CullModeFlagBits::eBack,
 		vk::FrontFace::eClockwise,
-		false // ignore depth bias and lineWidth
+		false, 0,0,0,// depth bias
+		1.0, // line width
+		nullptr // pnext
 	);
 
 	vk::PipelineMultisampleStateCreateInfo multiSampleInfo({}, vk::SampleCountFlagBits::e1, false);
@@ -165,11 +165,20 @@ PipelineBundle createPipeline(const PresentationLayer &presentation, const std::
 		0, nullptr // preserve attachments
 	);
 
+	vk::SubpassDependency dependency(
+		VK_SUBPASS_EXTERNAL,
+		0,
+	    vk::PipelineStageFlagBits::eColorAttachmentOutput, // srcStageMask
+		vk::PipelineStageFlagBits::eColorAttachmentOutput, // dstStageMask
+		vk::AccessFlags(), // srcAccessMask
+		vk::AccessFlagBits::eColorAttachmentWrite, // dstAccessMask
+		{} // dependencyflags
+	);
 	vk::RenderPassCreateInfo renderPassInfo(
 		vk::RenderPassCreateFlags(),
 		1, &colorAttachment,
 		1, &subpass,
-		0, nullptr //dependencies
+		1, &dependency //dependencies
 	);
 
 	vk::RenderPass renderPass = device.createRenderPass(renderPassInfo);

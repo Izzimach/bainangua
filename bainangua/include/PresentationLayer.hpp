@@ -16,6 +16,7 @@ struct PresentationLayer
 	void build(OuterBoilerplateState& boilerplate);
 	void teardown();
 
+	void connectRenderPass(vk::RenderPass& renderPass);
 
 	vk::Format swapChainFormat_;
 	vk::Extent2D swapChainExtent2D_;
@@ -24,14 +25,19 @@ struct PresentationLayer
 	std::optional<vk::Device> swapChainDevice_;
 	std::optional<vk::SwapchainKHR> swapChain_;
 
+	std::vector<vk::Framebuffer> swapChainFramebuffers_;
+
+	vk::Semaphore imageAvailableSemaphore_;
+	vk::Semaphore renderFinishedSemaphore_;
+	vk::Fence inFlightFence_;
+
 private:
-	void connectRenderPass(vk::RenderPass& renderPass);
 
 	void teardownFramebuffers();
 
 	std::vector<vk::Image> swapChainImages_;
 	std::vector<vk::ImageView> swapChainImageViews_;
-	std::vector<vk::Framebuffer> swapChainFramebuffers_;
+
 };
 
 }

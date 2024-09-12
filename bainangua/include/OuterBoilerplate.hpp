@@ -4,6 +4,8 @@
 
 #include "bainangua.hpp"
 
+#include <functional>
+
 namespace bainangua {
 
 struct OuterBoilerplateState {
@@ -11,7 +13,9 @@ struct OuterBoilerplateState {
     GLFWwindow* glfwWindow;
     vk::PhysicalDevice vkPhysicalDevice;
     vk::Device vkDevice;
+    uint32_t graphicsQueueFamilyIndex;
     vk::Queue graphicsQueue;
+    uint32_t presentQueueFamilyIndex;
     vk::Queue presentQueue;
     vk::SurfaceKHR vkSurface;
 

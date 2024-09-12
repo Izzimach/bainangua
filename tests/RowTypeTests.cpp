@@ -7,7 +7,7 @@
 #include <boost/hana/pair.hpp>
 #include <boost/hana/at_key.hpp>
 
-import RowType;
+#include "include/RowType.hpp"
 
 using namespace RowType;
 

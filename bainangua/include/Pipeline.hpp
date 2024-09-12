@@ -4,6 +4,8 @@
 #include "bainangua.hpp"
 #include "PresentationLayer.hpp"
 
+#include <filesystem>
+
 namespace bainangua {
 
 struct PipelineBundle
@@ -15,7 +17,7 @@ struct PipelineBundle
 	vk::ShaderModule fragmentShaderModule;
 };
 
-PipelineBundle createPipeline(const PresentationLayer& presentation, const std::string& vertexShaderFile, const std::string& fragmentShaderFile);
+PipelineBundle createPipeline(const PresentationLayer& presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile);
 
 void destroyPipeline(const PresentationLayer& presentation, PipelineBundle& pipeline);
 

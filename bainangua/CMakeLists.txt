@@ -14,7 +14,7 @@ find_package(boost_asio CONFIG REQUIRED)
 # basic library, used by the main executable and test executable
 #
 
-add_library(bainangua STATIC "OuterBoilerplate.cpp" "PresentationLayer.cpp" "Pipeline.cpp")
+add_library(bainangua STATIC "OuterBoilerplate.cpp" "PresentationLayer.cpp" "Pipeline.cpp" "Commands.cpp" "OneFrame.cpp")
 target_compile_features(bainangua PUBLIC cxx_std_20)
 
 target_include_directories(bainangua PUBLIC
@@ -24,7 +24,7 @@ target_include_directories(bainangua PUBLIC
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     target_compile_options(bainangua PRIVATE /W4)
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_compile_options(bainangua PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(bainangua PRIVATE -Wall -Wextra -Wpedantic -Wconversion)
 endif()
 
 target_link_libraries(bainangua PUBLIC glfw)
@@ -52,21 +52,23 @@ target_link_libraries(experimental_lib PUBLIC fmt::fmt)
 target_link_libraries(experimental_lib INTERFACE Boost::hana Boost::asio)
 
 #
-# shader compilation
+# shader compilation - shaders get compiled and put into assets/shaders in the build tree
 #
 
-add_custom_target(shaders ALL
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/shaders)
-
 set(SHADER_FILES
-    shaders/Basic.vert
-    shaders/Basic.frag
+    Basic.vert
+    Basic.frag
     )
+
+set(SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/shaders")
+set(SHADER_BINARY_DIR "${ASSETS_BINARY_DIR}/shaders")
+
+add_custom_target(shaders ALL COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADER_BINARY_DIR})
 
 foreach (FILE ${SHADER_FILES})
     add_custom_command(
         TARGET shaders
-        COMMAND glslc ${CMAKE_CURRENT_SOURCE_DIR}/${FILE} -o ${CMAKE_CURRENT_BINARY_DIR}/$<PATH:REPLACE_EXTENSION,${FILE},$<JOIN:$<LIST:APPEND,$<PATH:GET_EXTENSION,${FILE}>,spv>,_>>
+        COMMAND glslc ${SHADER_SOURCE_DIR}/${FILE} -o ${SHADER_BINARY_DIR}/$<PATH:REPLACE_EXTENSION,${FILE},$<JOIN:$<LIST:APPEND,$<PATH:GET_EXTENSION,${FILE}>,spv>,_>>
         COMMENT "Compiling HLSL ${FILE}"
         VERBATIM)
 endforeach (FILE)
@@ -78,7 +80,18 @@ endforeach (FILE)
 add_executable (white_pumpkin "white_pumpkin.cpp")
 target_compile_features(white_pumpkin PUBLIC cxx_std_20)
 
-target_include_directories(white_pumpkin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set(ASSETS_DIR ${ASSETS_BINARY_DIR})
+cmake_path(RELATIVE_PATH ASSETS_DIR
+           BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+
+configure_file(white_pumpkin.hpp.in white_pumpkin.hpp)
+
+target_include_directories(white_pumpkin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}   # the generated white_pumpkin.hpp gets put in the BUILD directory, so this makes sure we can find it
+    )
+
+
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     target_compile_options(bainangua PRIVATE /W4)

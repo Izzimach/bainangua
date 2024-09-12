@@ -2,24 +2,59 @@
 // 白南瓜 test application main entry point
 
 #include "bainangua.hpp"
+#include "OneFrame.hpp"
 #include "OuterBoilerplate.hpp"
 #include "Pipeline.hpp"
 #include "PresentationLayer.hpp"
 #include "tanuki.hpp"
+#include "white_pumpkin.hpp"
 
 #include <algorithm>
+#include <filesystem>
 #include <fmt/format.h>
 #include <vector>
 
+void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, const bainangua::PresentationLayer &presenter, const bainangua::PipelineBundle &pipeline)
+{
+	vk::CommandBufferBeginInfo beginInfo({}, {});
+	buffer.begin(beginInfo);
 
-using namespace std;
-using namespace bainangua;
+	std::array<vk::ClearValue, 1> clearColors{ vk::ClearValue() };
 
+	vk::RenderPassBeginInfo renderPassInfo(
+		pipeline.renderPass,
+		swapChainImage,
+		vk::Rect2D({ 0,0 }, presenter.swapChainExtent2D_),
+		clearColors
+	);
+	buffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+
+	buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.graphicsPipelines[0]);
+
+	vk::Viewport viewport(
+		0.0f,
+		0.0f,
+		static_cast<float>(presenter.swapChainExtent2D_.width),
+		static_cast<float>(presenter.swapChainExtent2D_.height),
+		0.0f,
+		1.0f
+	);
+	buffer.setViewport(0, 1, &viewport);
+
+	vk::Rect2D scissor({ 0,0 }, presenter.swapChainExtent2D_);
+	buffer.setScissor(0, 1, &scissor);
+
+	buffer.draw(3, 1, 0, 0);
+
+	buffer.endRenderPass();
+
+	buffer.end();
+}
 
 int main()
 {
-	outerBoilerplate(
-		OuterBoilerplateConfig{
+	bainangua::outerBoilerplate(
+		bainangua::OuterBoilerplateConfig{
 			.AppName = "My Test App",
 			.requiredExtensions = {
 				VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
@@ -30,15 +65,37 @@ int main()
 #else
 			.useValidation = true,
 #endif
-			.innerCode = [](OuterBoilerplateState& s) -> bool {
-				PresentationLayer presenter;
+			.innerCode = [](bainangua::OuterBoilerplateState& s) -> bool {
+				bainangua::PresentationLayer presenter;
 				presenter.build(s);
 
-				PipelineBundle pipeline(createPipeline(presenter, "shaders/Basic.frag_spv", "shaders/Basic.vert_spv"));
+				std::filesystem::path shader_path = SHADER_DIR;
+				bainangua::PipelineBundle pipeline(bainangua::createPipeline(presenter, (shader_path / "Basic.vert_spv"), (shader_path / "Basic.frag_spv")));
 
-				s.endOfFrame();
+				presenter.connectRenderPass(pipeline.renderPass);
 
-				destroyPipeline(presenter, pipeline);
+				vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
+
+				bainangua::withCommandPool(s, poolInfo, [&presenter, &s, &pipeline](vk::CommandPool pool) {
+					std::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
+					vk::CommandBuffer oneBuffer = buffers[0];
+
+					while (!glfwWindowShouldClose(s.glfwWindow)) {
+
+						auto result = bainangua::drawOneFrame(s, presenter, oneBuffer, [&presenter, &pipeline](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
+								recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline);
+							});
+						if (result != vk::Result::eSuccess) {
+							break;
+						}
+
+						glfwPollEvents();
+
+						s.endOfFrame();
+					}
+					});
+
+				bainangua::destroyPipeline(presenter, pipeline);
 
 				presenter.teardown();
 

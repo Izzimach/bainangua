@@ -23,6 +23,14 @@ endif()
 
 project ("bainangua")
 
+#
+# Assets directory
+#
+# Assets such as shaders and textures are put into an "assets/" directory in the build directory.
+#
+
+set(ASSETS_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets)
+
 # library and example app
 
 add_subdirectory ("bainangua")
@@ -32,5 +40,3 @@ add_subdirectory ("bainangua")
 
 enable_testing()
 add_subdirectory("tests")
-
-

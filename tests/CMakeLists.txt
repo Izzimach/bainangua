@@ -9,14 +9,25 @@ find_package(Vulkan REQUIRED)
 find_package(GTest REQUIRED)
 find_package(Boost REQUIRED)
 
-add_executable(nangua_test "tests.cpp" "RowTypeTests.cpp")
+add_executable(nangua_test "nangua_tests.cpp" "RowTypeTests.cpp")
 target_compile_features(nangua_test PUBLIC cxx_std_20)
 
-target_include_directories(nangua_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set(ASSETS_DIR ${ASSETS_BINARY_DIR})
+cmake_path(RELATIVE_PATH ASSETS_DIR
+           BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+
+configure_file(nangua_tests.hpp.in nangua_tests.hpp)
+
+target_include_directories(nangua_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
 
 target_link_libraries(nangua_test PRIVATE glfw)
 target_link_libraries(nangua_test PRIVATE Vulkan::Vulkan)
 target_link_libraries(nangua_test PRIVATE GTest::gtest_main)
 target_link_libraries(nangua_test PRIVATE bainangua)
+
+add_dependencies(nangua_test shaders)
 
 gtest_discover_tests(nangua_test)

@@ -4,12 +4,12 @@
 // - swapchain images
 //
 
-#include <vector>
-#include <ranges>
-#include <optional>
-
-#include "include/bainangua.hpp"
+#include "bainangua.hpp"
 #include "PresentationLayer.hpp"
+
+#include <optional>
+#include <ranges>
+#include <vector>
 
 
 namespace {
@@ -111,6 +111,10 @@ void PresentationLayer::build(OuterBoilerplateState& boilerplate)
 			vk::ImageViewCreateInfo viewInfo({}, i, vk::ImageViewType::e2D, swapChainFormat_, vk::ComponentMapping(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1), nullptr);
 			return swapChainDevice_.value().createImageView(viewInfo);
 		});
+
+	imageAvailableSemaphore_ = swapChainDevice_.value().createSemaphore({});
+	renderFinishedSemaphore_ = swapChainDevice_.value().createSemaphore({});
+	inFlightFence_ = swapChainDevice_.value().createFence({});
 }
 
 void PresentationLayer::connectRenderPass(vk::RenderPass& renderPass)
@@ -137,7 +141,12 @@ void PresentationLayer::teardown()
 {
 	if (swapChainDevice_ && swapChain_)
 	{
+		swapChainDevice_.value().destroySemaphore(imageAvailableSemaphore_);
+		swapChainDevice_.value().destroySemaphore(renderFinishedSemaphore_);
+		swapChainDevice_.value().destroyFence(inFlightFence_);
+
 		teardownFramebuffers();
+
 		std::ranges::for_each(swapChainImageViews_,
 			[&](vk::ImageView iv) {
 				swapChainDevice_.value().destroyImageView(iv);
@@ -147,6 +156,5 @@ void PresentationLayer::teardown()
 		swapChain_.reset();
 	}
 }
-
 
 }
