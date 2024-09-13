@@ -23,7 +23,7 @@ void withCommandBuffers(const OuterBoilerplateState& s, const vk::CommandBufferA
 	try {
 		wrapped(buffers);
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		s.vkDevice.freeCommandBuffers(info.commandPool, buffers);
 		throw e;
 	}

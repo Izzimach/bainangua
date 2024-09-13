@@ -21,6 +21,9 @@ struct OuterBoilerplateState {
 
     // your callback should call this at 'end-of-frame'
     std::coroutine_handle<> endOfFrame;
+
+    // flag that window was resized
+    bool windowResized;
 };
 
 struct OuterBoilerplateConfig {

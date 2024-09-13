@@ -11,15 +11,15 @@
 #include "bainangua.hpp"
 #include "OuterBoilerplate.hpp"
 
-#include <concepts>
-#include <vector>
 #include <array>
+#include <concepts>
 #include <chrono>
-#include <thread>
+#include <coroutine>
 #include <functional>
 #include <ranges>
 #include <string_view>
-#include <coroutine>
+#include <thread>
+#include <vector>
 
 #include <boost/asio.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -67,6 +67,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     fmt::print("Validation message: [{}]\n", pCallbackData->pMessage);
 
     return VK_FALSE;
+}
+
+static void framebufferResizeCallback(GLFWwindow* window, int /*width*/, int /*height*/) {
+    auto s = reinterpret_cast<bainangua::OuterBoilerplateState*>(glfwGetWindowUserPointer(window));
+    if (s) s->windowResized = true;
 }
 }
 
@@ -249,11 +254,15 @@ int outerBoilerplate(const OuterBoilerplateConfig& config)
 
     try
     {
-        OuterBoilerplateState vkState{instance, window, physicalDevice, device, graphicsQueueFamilyIndex, graphicsQueue, presentQueueFamilyIndex.value(), presentQueue, surface, counter()};
+        OuterBoilerplateState vkState{instance, window, physicalDevice, device, graphicsQueueFamilyIndex, graphicsQueue, presentQueueFamilyIndex.value(), presentQueue, surface, counter(), false};
+        glfwSetWindowUserPointer(window, &vkState);
+        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+
         bool result = config.innerCode(vkState);
         if (!result) {
             fmt::print("inner code returned false\n");
         }
+        glfwSetWindowUserPointer(window, nullptr);
     }
     catch (vk::SystemError& err)
     {

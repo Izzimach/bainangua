@@ -82,10 +82,11 @@ int main()
 					size_t multiFrameIndex = 0;
 					while (!glfwWindowShouldClose(s.glfwWindow)) {
 
-						auto result = bainangua::drawOneFrame(s, presenter, commandBuffers[multiFrameIndex], multiFrameIndex, [&presenter, &pipeline](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
+						auto result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&presenter, &pipeline](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
 								recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline);
 							});
-						if (result != vk::Result::eSuccess) {
+						if (result != vk::Result::eSuccess &&
+							result != vk::Result::eErrorOutOfDateKHR) {
 							break;
 						}
 
@@ -98,7 +99,6 @@ int main()
 
 					s.vkDevice.waitIdle();
 				});
-
 
 				bainangua::destroyPipeline(presenter, pipeline);
 

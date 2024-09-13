@@ -18,7 +18,9 @@ struct PresentationLayer
 	void build(OuterBoilerplateState& boilerplate);
 	void teardown();
 
-	void connectRenderPass(vk::RenderPass& renderPass);
+	void connectRenderPass(const vk::RenderPass& renderPass);
+
+	void rebuildSwapChain(OuterBoilerplateState &s);
 
 	vk::Format swapChainFormat_;
 	vk::Extent2D swapChainExtent2D_;

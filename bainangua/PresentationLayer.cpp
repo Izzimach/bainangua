@@ -121,7 +121,7 @@ void PresentationLayer::build(OuterBoilerplateState& boilerplate)
 	}
 }
 
-void PresentationLayer::connectRenderPass(vk::RenderPass& renderPass)
+void PresentationLayer::connectRenderPass(const vk::RenderPass& renderPass)
 {
 	teardownFramebuffers();
 	swapChainFramebuffers_.resize(swapChainImageCount_);
@@ -139,6 +139,15 @@ void PresentationLayer::teardownFramebuffers()
 			swapChainDevice_.value().destroyFramebuffer(f);
 		});
 	swapChainFramebuffers_.clear();
+}
+
+void PresentationLayer::rebuildSwapChain(OuterBoilerplateState &s)
+{
+	s.vkDevice.waitIdle();
+
+	teardown();
+
+	build(s);
 }
 
 void PresentationLayer::teardown()

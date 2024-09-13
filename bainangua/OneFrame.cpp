@@ -6,7 +6,7 @@
 
 namespace bainangua {
 
-vk::Result drawOneFrame(const OuterBoilerplateState &s, const PresentationLayer& presenter, vk::CommandBuffer buffer, size_t multiFrameIndex, std::function<void(vk::CommandBuffer, vk::Framebuffer)> drawCommands)
+vk::Result drawOneFrame(OuterBoilerplateState &s, PresentationLayer& presenter, const PipelineBundle &pipeline, vk::CommandBuffer buffer, size_t multiFrameIndex, std::function<void(vk::CommandBuffer, vk::Framebuffer)> drawCommands)
 {
 	vk::Result waitResult = s.vkDevice.waitForFences(presenter.inFlightFences_[multiFrameIndex], vk::True, UINT64_MAX);
 	if (waitResult != vk::Result::eSuccess)
@@ -14,13 +14,19 @@ vk::Result drawOneFrame(const OuterBoilerplateState &s, const PresentationLayer&
 		return waitResult;
 	}
 
-	s.vkDevice.resetFences(presenter.inFlightFences_[multiFrameIndex]);
-
-	auto [acquireResult, imageIndex] = s.vkDevice.acquireNextImageKHR(presenter.swapChain_.value(), UINT64_MAX, presenter.imageAvailableSemaphores_[multiFrameIndex], VK_NULL_HANDLE);
-	if (acquireResult != vk::Result::eSuccess)
-	{
+	// we don't use the "enhanced" version of acquireNextImageKHR since it throws on an OutOfDateKHR result
+	uint32_t imageIndex;
+	vk::Result acquireResult = s.vkDevice.acquireNextImageKHR(presenter.swapChain_.value(), UINT64_MAX, presenter.imageAvailableSemaphores_[multiFrameIndex], VK_NULL_HANDLE, &imageIndex);
+	if (acquireResult == vk::Result::eErrorOutOfDateKHR || acquireResult == vk::Result::eSuboptimalKHR || s.windowResized) {
+		s.windowResized = false;
+		presenter.rebuildSwapChain(s);
+		presenter.connectRenderPass(pipeline.renderPass);
+		return acquireResult;
+	} else if (acquireResult != vk::Result::eSuccess) {
 		return acquireResult;
 	}
+
+	s.vkDevice.resetFences(presenter.inFlightFences_[multiFrameIndex]);
 
 	buffer.reset();
 	drawCommands(buffer, presenter.swapChainFramebuffers_[imageIndex]);
@@ -35,7 +41,7 @@ vk::Result drawOneFrame(const OuterBoilerplateState &s, const PresentationLayer&
 		imageIndex,
 		nullptr
 	);
-	auto presentResult = s.presentQueue.presentKHR(presentInfo);
+	auto presentResult = s.presentQueue.presentKHR(&presentInfo);
 	if (presentResult != vk::Result::eSuccess)
 	{
 		return presentResult;
