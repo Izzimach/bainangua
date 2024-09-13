@@ -73,6 +73,7 @@ static void framebufferResizeCallback(GLFWwindow* window, int /*width*/, int /*h
     auto s = reinterpret_cast<bainangua::OuterBoilerplateState*>(glfwGetWindowUserPointer(window));
     if (s) s->windowResized = true;
 }
+
 }
 
 namespace bainangua {

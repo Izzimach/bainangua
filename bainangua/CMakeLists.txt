@@ -14,8 +14,12 @@ find_package(boost_asio CONFIG REQUIRED)
 # basic library, used by the main executable and test executable
 #
 
-add_library(bainangua STATIC "OuterBoilerplate.cpp" "PresentationLayer.cpp" "Pipeline.cpp" "Commands.cpp" "OneFrame.cpp")
+add_library(bainangua STATIC "OuterBoilerplate.cpp" "PresentationLayer.cpp" "Pipeline.cpp" "Commands.cpp")
 target_compile_features(bainangua PUBLIC cxx_std_20)
+
+target_sources(bainangua
+    PUBLIC
+        FILE_SET bainangua_modules TYPE CXX_MODULES FILES "OneFrame.cppm")
 
 target_include_directories(bainangua PUBLIC
 	${CMAKE_CURRENT_SOURCE_DIR}

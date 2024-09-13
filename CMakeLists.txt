@@ -2,7 +2,7 @@
 # Root CMAKE file for bainangua
 #
 
-cmake_minimum_required (VERSION 3.20)
+cmake_minimum_required (VERSION 3.29)
 
 
 # Enable Hot Reload for MSVC compilers if supported.

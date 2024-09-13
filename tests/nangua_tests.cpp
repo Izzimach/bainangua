@@ -1,12 +1,14 @@
 
 
 #include "bainangua.hpp"
+#include "Commands.hpp"
 #include "gtest/gtest.h"
-#include "OneFrame.hpp"
 #include "OuterBoilerplate.hpp"
 #include "nangua_tests.hpp"
 #include "Pipeline.hpp"
 #include "PresentationLayer.hpp"
+
+import OneFrame;
 
 using namespace bainangua;
 
@@ -118,7 +120,7 @@ TEST(OneFrame, BasicTest)
 
 					size_t multiFrameIndex = framesLeft % bainangua::MultiFrameCount;
 
-					auto result = bainangua::drawOneFrame(s, presenter, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
+					auto result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
 							recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline);
 						});
 					if (result != vk::Result::eSuccess) {
