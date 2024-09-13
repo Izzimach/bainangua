@@ -1,9 +1,9 @@
 //
 // Code to assemble a Vulkan pipeline.
 // 
+module;
 
 #include "bainangua.hpp"
-#include "Pipeline.hpp"
 
 #include <boost/asio.hpp>
 #include <filesystem>
@@ -11,7 +11,9 @@
 #include <ranges>
 #include <vector>
 
-namespace {
+export module Pipeline;
+
+import PresentationLayer;
 
 std::vector<char> readFile(std::filesystem::path filePath)
 {
@@ -40,10 +42,19 @@ vk::ShaderModule createShaderModule(vk::Device device, const std::vector<char>& 
 	return module;
 }
 
-}
-
 namespace bainangua {
+export
+struct PipelineBundle
+{
+	std::vector<vk::Pipeline> graphicsPipelines;
+	vk::RenderPass renderPass;
+	vk::PipelineLayout pipelineLayout;
+	vk::ShaderModule vertexShaderModule;
+	vk::ShaderModule fragmentShaderModule;
+};
 
+
+export
 PipelineBundle createPipeline(const PresentationLayer &presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
 	vk::Device device = presentation.swapChainDevice_.value();
@@ -217,6 +228,7 @@ PipelineBundle createPipeline(const PresentationLayer &presentation, std::filesy
 	return PipelineBundle{ graphicsPipelines, renderPass, pipelineLayout, vertexShaderModule, fragmentShaderModule };
 }
 
+export
 void destroyPipeline(const PresentationLayer &presentation, PipelineBundle& pipeline)
 {
 	vk::Device device = presentation.swapChainDevice_.value();

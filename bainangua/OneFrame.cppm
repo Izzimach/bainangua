@@ -1,17 +1,16 @@
 module;
 
 #include "bainangua.hpp"
-#include "Commands.hpp"
-#include "OuterBoilerplate.hpp"
-#include "Pipeline.hpp"
-#include "PresentationLayer.hpp"
-
-
-#include "bainangua.hpp"
 
 #include <functional>
 
 export module OneFrame;
+
+import Commands;
+import OuterBoilerplate;
+import PresentationLayer;
+import Pipeline;
+
 
 namespace bainangua {
 

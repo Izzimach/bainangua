@@ -4,15 +4,17 @@
 // - swapchain images
 //
 
+module;
+
 #include "bainangua.hpp"
-#include "PresentationLayer.hpp"
 
 #include <optional>
 #include <ranges>
 #include <vector>
 
+export module PresentationLayer;
 
-namespace {
+import OuterBoilerplate;
 
 struct SwapChainProperties
 {
@@ -58,10 +60,46 @@ uint32_t chooseSwapChainImageCount(const SwapChainProperties& swapChainPropertie
 	}
 	return minImageCount + 1;
 }
-}
 
 namespace bainangua {
 
+export constexpr uint32_t MultiFrameCount = 2;
+
+export struct PresentationLayer
+{
+	PresentationLayer() {}
+	~PresentationLayer() { teardown(); }
+
+	void build(OuterBoilerplateState& boilerplate);
+	void teardown();
+
+	void connectRenderPass(const vk::RenderPass& renderPass);
+
+	void rebuildSwapChain(OuterBoilerplateState& s);
+
+	vk::Format swapChainFormat_;
+	vk::Extent2D swapChainExtent2D_;
+	unsigned int swapChainImageCount_;
+
+	std::optional<vk::Device> swapChainDevice_;
+	std::optional<vk::SwapchainKHR> swapChain_;
+
+	std::vector<vk::Framebuffer> swapChainFramebuffers_;
+
+	std::array<vk::Semaphore, MultiFrameCount> imageAvailableSemaphores_;
+	std::array<vk::Semaphore, MultiFrameCount> renderFinishedSemaphores_;
+	std::array<vk::Fence, MultiFrameCount> inFlightFences_;
+
+private:
+
+	void teardownFramebuffers();
+
+	std::vector<vk::Image> swapChainImages_;
+	std::vector<vk::ImageView> swapChainImageViews_;
+};
+
+
+export
 void PresentationLayer::build(OuterBoilerplateState& boilerplate)
 {
 	using namespace std::views;

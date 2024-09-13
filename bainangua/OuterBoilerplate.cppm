@@ -7,12 +7,14 @@
 //
 //  This part specifically does NOT create a swapchain or handle any sort of memory allocation.
 //
+module;
+
 
 #include "bainangua.hpp"
-#include "OuterBoilerplate.hpp"
 
 #include <array>
 #include <concepts>
+#include <coroutine>
 #include <chrono>
 #include <coroutine>
 #include <functional>
@@ -26,7 +28,7 @@
 
 #include <fmt/format.h>
 
-namespace {
+export module OuterBoilerplate;
 
 struct ReturnObject {
     struct promise_type {
@@ -58,6 +60,37 @@ ReturnObject counter()
     }
 }
 
+
+namespace bainangua {
+    
+export struct OuterBoilerplateState {
+    vk::Instance vkInstance;
+    GLFWwindow* glfwWindow;
+    vk::PhysicalDevice vkPhysicalDevice;
+    vk::Device vkDevice;
+    uint32_t graphicsQueueFamilyIndex;
+    vk::Queue graphicsQueue;
+    uint32_t presentQueueFamilyIndex;
+    vk::Queue presentQueue;
+    vk::SurfaceKHR vkSurface;
+
+    // your callback should call this at 'end-of-frame'
+    std::coroutine_handle<> endOfFrame;
+
+    // flag that window was resized
+    bool windowResized;
+};
+
+export struct OuterBoilerplateConfig {
+    std::string AppName{ "Vulkan App" };
+    std::string EngineName{ "Default Vulkan Engine" };
+    std::vector<std::string> requiredExtensions;
+
+    bool useValidation;
+
+    std::function<bool(OuterBoilerplateState&)> innerCode;
+};
+
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT /*messageSeverity*/,
     VkDebugUtilsMessageTypeFlagsEXT /*messageType*/,
@@ -74,11 +107,9 @@ static void framebufferResizeCallback(GLFWwindow* window, int /*width*/, int /*h
     if (s) s->windowResized = true;
 }
 
-}
 
-namespace bainangua {
-
-int outerBoilerplate(const OuterBoilerplateConfig& config)
+export
+auto outerBoilerplate(const OuterBoilerplateConfig& config) -> int
 {
     int runResult = 0;
 
@@ -301,6 +332,7 @@ int outerBoilerplate(const OuterBoilerplateConfig& config)
 
     return runResult;
 }
+
 
 
 }
