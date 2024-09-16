@@ -14,7 +14,7 @@ module;
 
 export module PresentationLayer;
 
-import OuterBoilerplate;
+import VulkanContext;
 
 struct SwapChainProperties
 {
@@ -23,7 +23,7 @@ struct SwapChainProperties
 	std::vector<vk::PresentModeKHR> presentModes;
 };
 
-SwapChainProperties querySwapChainProperties(const bainangua::OuterBoilerplateState& boilerplate)
+SwapChainProperties querySwapChainProperties(const bainangua::VulkanContext& boilerplate)
 {
 	vk::SurfaceCapabilitiesKHR capabilities = boilerplate.vkPhysicalDevice.getSurfaceCapabilitiesKHR(boilerplate.vkSurface);
 	std::vector<vk::SurfaceFormatKHR> formats = boilerplate.vkPhysicalDevice.getSurfaceFormatsKHR(boilerplate.vkSurface);
@@ -32,7 +32,7 @@ SwapChainProperties querySwapChainProperties(const bainangua::OuterBoilerplateSt
 	return SwapChainProperties(capabilities, formats, presentModes);
 }
 
-vk::Extent2D chooseSwapChainImageExtent(const bainangua::OuterBoilerplateState& boilerplate, const SwapChainProperties& swapChainProperties)
+vk::Extent2D chooseSwapChainImageExtent(const bainangua::VulkanContext& boilerplate, const SwapChainProperties& swapChainProperties)
 {
 	if (swapChainProperties.capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
 		return swapChainProperties.capabilities.currentExtent;
@@ -70,12 +70,12 @@ export struct PresentationLayer
 	PresentationLayer() {}
 	~PresentationLayer() { teardown(); }
 
-	void build(OuterBoilerplateState& boilerplate);
+	void build(VulkanContext& boilerplate);
 	void teardown();
 
 	void connectRenderPass(const vk::RenderPass& renderPass);
 
-	void rebuildSwapChain(OuterBoilerplateState& s);
+	void rebuildSwapChain(VulkanContext& s);
 
 	vk::Format swapChainFormat_;
 	vk::Extent2D swapChainExtent2D_;
@@ -100,7 +100,7 @@ private:
 
 
 export
-void PresentationLayer::build(OuterBoilerplateState& boilerplate)
+void PresentationLayer::build(VulkanContext& boilerplate)
 {
 	using namespace std::views;
 	SwapChainProperties swapChainInfo = querySwapChainProperties(boilerplate);
@@ -179,7 +179,7 @@ void PresentationLayer::teardownFramebuffers()
 	swapChainFramebuffers_.clear();
 }
 
-void PresentationLayer::rebuildSwapChain(OuterBoilerplateState &s)
+void PresentationLayer::rebuildSwapChain(VulkanContext &s)
 {
 	s.vkDevice.waitIdle();
 

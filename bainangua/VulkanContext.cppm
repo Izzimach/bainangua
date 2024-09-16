@@ -1,5 +1,5 @@
 //
-// This vulkan boilerplate handles most of the initial outer layers involving initialization and tear down, including:
+// This vulkan context handles most of the initial outer layers involving initialization and tear down, including:
 //  - getting extensions
 //  - creating a vkInstance
 //  - creating a window and physical device
@@ -28,7 +28,7 @@ module;
 
 #include <fmt/format.h>
 
-export module OuterBoilerplate;
+export module VulkanContext;
 
 struct ReturnObject {
     struct promise_type {
@@ -63,16 +63,17 @@ ReturnObject counter()
 
 namespace bainangua {
     
-export struct OuterBoilerplateState {
+export struct VulkanContext {
     vk::Instance vkInstance;
     GLFWwindow* glfwWindow;
     vk::PhysicalDevice vkPhysicalDevice;
     vk::Device vkDevice;
+    vk::SurfaceKHR vkSurface;
+
     uint32_t graphicsQueueFamilyIndex;
     vk::Queue graphicsQueue;
     uint32_t presentQueueFamilyIndex;
     vk::Queue presentQueue;
-    vk::SurfaceKHR vkSurface;
 
     // your callback should call this at 'end-of-frame'
     std::coroutine_handle<> endOfFrame;
@@ -81,14 +82,14 @@ export struct OuterBoilerplateState {
     bool windowResized;
 };
 
-export struct OuterBoilerplateConfig {
+export struct VulkanContextConfig {
     std::string AppName{ "Vulkan App" };
     std::string EngineName{ "Default Vulkan Engine" };
     std::vector<std::string> requiredExtensions;
 
     bool useValidation;
 
-    std::function<bool(OuterBoilerplateState&)> innerCode;
+    std::function<bool(VulkanContext&)> innerCode;
 };
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -103,13 +104,13 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 }
 
 static void framebufferResizeCallback(GLFWwindow* window, int /*width*/, int /*height*/) {
-    auto s = reinterpret_cast<bainangua::OuterBoilerplateState*>(glfwGetWindowUserPointer(window));
+    auto s = reinterpret_cast<bainangua::VulkanContext*>(glfwGetWindowUserPointer(window));
     if (s) s->windowResized = true;
 }
 
 
 export
-auto outerBoilerplate(const OuterBoilerplateConfig& config) -> int
+auto createVulkanContext(const VulkanContextConfig& config) -> int
 {
     int runResult = 0;
 
@@ -286,7 +287,7 @@ auto outerBoilerplate(const OuterBoilerplateConfig& config) -> int
 
     try
     {
-        OuterBoilerplateState vkState{instance, window, physicalDevice, device, graphicsQueueFamilyIndex, graphicsQueue, presentQueueFamilyIndex.value(), presentQueue, surface, counter(), false};
+        VulkanContext vkState{instance, window, physicalDevice, device, surface, graphicsQueueFamilyIndex, graphicsQueue, presentQueueFamilyIndex.value(), presentQueue, counter(), false};
         glfwSetWindowUserPointer(window, &vkState);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 

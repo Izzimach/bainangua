@@ -5,7 +5,7 @@
 #include "nangua_tests.hpp"
 
 import OneFrame;
-import OuterBoilerplate;
+import VulkanContext;
 import PresentationLayer;
 import Pipeline;
 import Commands;
@@ -17,8 +17,8 @@ namespace {
 TEST(Boilerplate, BasicTest)
 {
 	EXPECT_NO_THROW(
-		outerBoilerplate(
-			OuterBoilerplateConfig{
+		createVulkanContext(
+			VulkanContextConfig{
 				.AppName = "Boilerplate Test App",
 				.requiredExtensions = {
 						VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
@@ -35,8 +35,8 @@ TEST(Boilerplate, BasicTest)
 TEST(PresentationLayer, BasicTest)
 {
 	EXPECT_NO_THROW(
-		outerBoilerplate(
-			OuterBoilerplateConfig{
+		createVulkanContext(
+			VulkanContextConfig{
 				.AppName = "PresentationLayer Test App",
 				.requiredExtensions = {
 						VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
@@ -44,7 +44,7 @@ TEST(PresentationLayer, BasicTest)
 						VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
 				},
 				.useValidation = false,
-				.innerCode = [](OuterBoilerplateState& s) -> bool {
+				.innerCode = [](VulkanContext& s) -> bool {
 					PresentationLayer presenter;
 					presenter.build(s);
 
@@ -100,7 +100,7 @@ TEST(OneFrame, BasicTest)
 		};
 
 	// renders 10 frames and then stops
-	auto renderLoop = [&recordCommandBuffer](OuterBoilerplateState& s) -> bool {
+	auto renderLoop = [&recordCommandBuffer](VulkanContext& s) -> bool {
 			bainangua::PresentationLayer presenter;
 			presenter.build(s);
 
@@ -144,8 +144,8 @@ TEST(OneFrame, BasicTest)
 		};
 	
 	EXPECT_NO_THROW(
-		outerBoilerplate(
-			OuterBoilerplateConfig{
+		createVulkanContext(
+			VulkanContextConfig{
 				.AppName = "OneFrame Test App",
 				.requiredExtensions = {
 						VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
@@ -158,8 +158,8 @@ TEST(OneFrame, BasicTest)
 		)
 	);
 	EXPECT_EQ(
-		outerBoilerplate(
-			OuterBoilerplateConfig{
+		createVulkanContext(
+			VulkanContextConfig{
 				.AppName = "OneFrame Test App",
 				.requiredExtensions = {
 						VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,

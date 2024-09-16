@@ -6,16 +6,14 @@ module;
 
 export module OneFrame;
 
-import Commands;
-import OuterBoilerplate;
+import VulkanContext;
 import PresentationLayer;
 import Pipeline;
-
 
 namespace bainangua {
 
 export
-vk::Result drawOneFrame(OuterBoilerplateState& s, PresentationLayer& presenter, const PipelineBundle& pipeline, vk::CommandBuffer buffer, size_t multiFrameIndex, std::function<void(vk::CommandBuffer, vk::Framebuffer)> drawCommands)
+vk::Result drawOneFrame(VulkanContext& s, PresentationLayer& presenter, const PipelineBundle& pipeline, vk::CommandBuffer buffer, size_t multiFrameIndex, std::function<void(vk::CommandBuffer, vk::Framebuffer)> drawCommands)
 {
 	vk::Result waitResult = s.vkDevice.waitForFences(presenter.inFlightFences_[multiFrameIndex], vk::True, UINT64_MAX);
 	if (waitResult != vk::Result::eSuccess)
@@ -32,32 +30,32 @@ vk::Result drawOneFrame(OuterBoilerplateState& s, PresentationLayer& presenter, 
 		presenter.connectRenderPass(pipeline.renderPass);
 		return acquireResult;
 	}
- else if (acquireResult != vk::Result::eSuccess) {
-  return acquireResult;
-}
+	else if (acquireResult != vk::Result::eSuccess) {
+		return acquireResult;
+	}
 
-s.vkDevice.resetFences(presenter.inFlightFences_[multiFrameIndex]);
+	s.vkDevice.resetFences(presenter.inFlightFences_[multiFrameIndex]);
 
-buffer.reset();
-drawCommands(buffer, presenter.swapChainFramebuffers_[imageIndex]);
+	buffer.reset();
+	drawCommands(buffer, presenter.swapChainFramebuffers_[imageIndex]);
 
-std::vector<vk::PipelineStageFlags> waitStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
-vk::SubmitInfo submitInfo(presenter.imageAvailableSemaphores_[multiFrameIndex], waitStages, buffer, presenter.renderFinishedSemaphores_[multiFrameIndex]);
-s.graphicsQueue.submit(submitInfo, presenter.inFlightFences_[multiFrameIndex]);
+	std::vector<vk::PipelineStageFlags> waitStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
+	vk::SubmitInfo submitInfo(presenter.imageAvailableSemaphores_[multiFrameIndex], waitStages, buffer, presenter.renderFinishedSemaphores_[multiFrameIndex]);
+	s.graphicsQueue.submit(submitInfo, presenter.inFlightFences_[multiFrameIndex]);
 
-vk::PresentInfoKHR presentInfo(
-	presenter.renderFinishedSemaphores_[multiFrameIndex],
-	presenter.swapChain_.value(),
-	imageIndex,
-	nullptr
-);
-auto presentResult = s.presentQueue.presentKHR(&presentInfo);
-if (presentResult != vk::Result::eSuccess)
-{
-	return presentResult;
-}
+	vk::PresentInfoKHR presentInfo(
+		presenter.renderFinishedSemaphores_[multiFrameIndex],
+		presenter.swapChain_.value(),
+		imageIndex,
+		nullptr
+	);
+	auto presentResult = s.presentQueue.presentKHR(&presentInfo);
+	if (presentResult != vk::Result::eSuccess)
+	{
+		return presentResult;
+	}
 
-return vk::Result::eSuccess;
-}
+	return vk::Result::eSuccess;
+	}
 
 }

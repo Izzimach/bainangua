@@ -6,11 +6,11 @@ module;
 
 export module Commands;
 
-import OuterBoilerplate;
+import VulkanContext;
 
 namespace bainangua {
 
-export inline vk::CommandPoolCreateInfo defaultCommandPool(const OuterBoilerplateState& s)
+export inline vk::CommandPoolCreateInfo defaultCommandPool(const VulkanContext& s)
 {
 	return vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
 }
@@ -21,7 +21,7 @@ export inline vk::CommandBufferAllocateInfo defaultCommandBuffer(vk::CommandPool
 }
 
 
-export void withCommandPool(const OuterBoilerplateState& s, const vk::CommandPoolCreateInfo& info, std::function<void(vk::CommandPool)> wrapped)
+export void withCommandPool(const VulkanContext& s, const vk::CommandPoolCreateInfo& info, std::function<void(vk::CommandPool)> wrapped)
 {
 	vk::CommandPool pool = s.vkDevice.createCommandPool(info);
 	try {
@@ -34,7 +34,7 @@ export void withCommandPool(const OuterBoilerplateState& s, const vk::CommandPoo
 	s.vkDevice.destroyCommandPool(pool);
 }
 
-export void withCommandBuffers(const OuterBoilerplateState& s, const vk::CommandBufferAllocateInfo& info, std::function<void(std::vector<vk::CommandBuffer> &)> wrapped)
+export void withCommandBuffers(const VulkanContext& s, const vk::CommandBufferAllocateInfo& info, std::function<void(std::vector<vk::CommandBuffer> &)> wrapped)
 {
 	std::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers(info);
 	try {
@@ -47,7 +47,7 @@ export void withCommandBuffers(const OuterBoilerplateState& s, const vk::Command
 	s.vkDevice.freeCommandBuffers(info.commandPool, buffers);
 }
 
-export void withCommandBuffer(const OuterBoilerplateState& s,vk::CommandPool pool, std::function<void(vk::CommandBuffer)> wrapped)
+export void withCommandBuffer(const VulkanContext& s,vk::CommandPool pool, std::function<void(vk::CommandBuffer)> wrapped)
 {
 	std::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
 	try {

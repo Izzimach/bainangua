@@ -11,7 +11,7 @@
 #include <vector>
 
 import Commands;
-import OuterBoilerplate;
+import VulkanContext;
 import OneFrame;
 import Pipeline;
 import PresentationLayer;
@@ -55,8 +55,8 @@ void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImag
 
 int main()
 {
-	bainangua::outerBoilerplate(
-		bainangua::OuterBoilerplateConfig{
+	bainangua::createVulkanContext(
+		bainangua::VulkanContextConfig{
 			.AppName = "My Test App",
 			.requiredExtensions = {
 				VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
@@ -67,7 +67,7 @@ int main()
 #else
 			.useValidation = true,
 #endif
-			.innerCode = [](bainangua::OuterBoilerplateState& s) -> bool {
+			.innerCode = [](bainangua::VulkanContext& s) -> bool {
 				bainangua::PresentationLayer presenter;
 				presenter.build(s);
 

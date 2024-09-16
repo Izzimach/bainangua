@@ -21,7 +21,7 @@ target_sources(bainangua
     PUBLIC
         FILE_SET bainangua_modules 
         TYPE CXX_MODULES 
-        FILES "OneFrame.cppm" "OuterBoilerplate.cppm" "PresentationLayer.cppm" "Pipeline.cppm" "Commands.cppm")
+        FILES "OneFrame.cppm" "VulkanContext.cppm" "PresentationLayer.cppm" "Pipeline.cppm" "Commands.cppm")
 
 target_include_directories(bainangua PUBLIC
 	${CMAKE_CURRENT_SOURCE_DIR}
