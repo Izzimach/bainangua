@@ -8,7 +8,9 @@ module;
 
 #include "bainangua.hpp"
 
+#include <immer/array.hpp>
 #include <optional>
+#include <numeric>
 #include <ranges>
 #include <vector>
 
@@ -19,8 +21,8 @@ import VulkanContext;
 struct SwapChainProperties
 {
 	vk::SurfaceCapabilitiesKHR capabilities;
-	std::vector<vk::SurfaceFormatKHR> formats;
-	std::vector<vk::PresentModeKHR> presentModes;
+	immer::array<vk::SurfaceFormatKHR> formats;
+	immer::array<vk::PresentModeKHR> presentModes;
 };
 
 SwapChainProperties querySwapChainProperties(const bainangua::VulkanContext& boilerplate)
@@ -29,7 +31,10 @@ SwapChainProperties querySwapChainProperties(const bainangua::VulkanContext& boi
 	std::vector<vk::SurfaceFormatKHR> formats = boilerplate.vkPhysicalDevice.getSurfaceFormatsKHR(boilerplate.vkSurface);
 	std::vector<vk::PresentModeKHR> presentModes = boilerplate.vkPhysicalDevice.getSurfacePresentModesKHR(boilerplate.vkSurface);
 
-	return SwapChainProperties(capabilities, formats, presentModes);
+	return SwapChainProperties(
+		capabilities,
+		immer::array<vk::SurfaceFormatKHR>(formats.begin(), formats.end()), 
+		immer::array<vk::PresentModeKHR>(presentModes.begin(), presentModes.end()));
 }
 
 vk::Extent2D chooseSwapChainImageExtent(const bainangua::VulkanContext& boilerplate, const SwapChainProperties& swapChainProperties)
@@ -67,62 +72,72 @@ export constexpr uint32_t MultiFrameCount = 2;
 
 export struct PresentationLayer
 {
-	PresentationLayer() {}
-	PresentationLayer(std::pmr::polymorphic_allocator<> allocator)
-		: swapChainFramebuffers_(allocator), swapChainImages_(allocator), swapChainImageViews_(allocator) {}
-	~PresentationLayer() { teardown(); }
+	PresentationLayer(
+		vk::Device device,
+		vk::SwapchainKHR swapChain,
+		vk::Format swapChainFormat,
+		vk::Extent2D swapChainExtent2D,
+		unsigned int swapChainImageCount,
+		immer::array<vk::Semaphore, bainangua_memory_policy> imageAvailableSemaphores,
+		immer::array<vk::Semaphore, bainangua_memory_policy> renderFinishedSemaphores,
+		immer::array<vk::Fence, bainangua_memory_policy> inFlightFences,
 
-	void build(VulkanContext& boilerplate);
+		immer::array<vk::Image, bainangua_memory_policy> swapChainImages,
+		immer::array<vk::ImageView, bainangua_memory_policy> swapChainImageViews,
+		immer::array<vk::Framebuffer, bainangua_memory_policy> swapChainFramebuffers
+		) : swapChainDevice_(device), swapChain_(swapChain), swapChainFormat_(swapChainFormat), swapChainExtent2D_(swapChainExtent2D),
+	        swapChainImageCount_(swapChainImageCount), imageAvailableSemaphores_(imageAvailableSemaphores), renderFinishedSemaphores_(renderFinishedSemaphores),
+		    inFlightFences_(inFlightFences), swapChainImages_(swapChainImages), swapChainImageViews_(swapChainImageViews), swapChainFramebuffers_(swapChainFramebuffers)
+			{}
+	~PresentationLayer() {}
+
 	void teardown();
+	void teardownFramebuffers();
 
 	void connectRenderPass(const vk::RenderPass& renderPass);
 
-	void rebuildSwapChain(VulkanContext& s);
+	std::optional<PresentationLayer> rebuildSwapChain(VulkanContext& s);
+
+	vk::Device swapChainDevice_;
+	vk::SwapchainKHR swapChain_;
 
 	vk::Format swapChainFormat_;
 	vk::Extent2D swapChainExtent2D_;
 	unsigned int swapChainImageCount_;
 
-	std::optional<vk::Device> swapChainDevice_;
-	std::optional<vk::SwapchainKHR> swapChain_;
+	immer::array<vk::Semaphore, bainangua_memory_policy> imageAvailableSemaphores_;
+	immer::array<vk::Semaphore, bainangua_memory_policy> renderFinishedSemaphores_;
+	immer::array<vk::Fence, bainangua_memory_policy> inFlightFences_;
 
-	std::pmr::vector<vk::Framebuffer> swapChainFramebuffers_;
-
-	std::array<vk::Semaphore, MultiFrameCount> imageAvailableSemaphores_;
-	std::array<vk::Semaphore, MultiFrameCount> renderFinishedSemaphores_;
-	std::array<vk::Fence, MultiFrameCount> inFlightFences_;
-
-private:
-
-	void teardownFramebuffers();
-
-	std::pmr::vector<vk::Image> swapChainImages_;
-	std::pmr::vector<vk::ImageView> swapChainImageViews_;
+	immer::array<vk::Image, bainangua_memory_policy> swapChainImages_;
+	immer::array<vk::ImageView, bainangua_memory_policy> swapChainImageViews_;
+	immer::array<vk::Framebuffer, bainangua_memory_policy> swapChainFramebuffers_;
 };
 
 
-export
-void PresentationLayer::build(VulkanContext& boilerplate)
+export std::optional<PresentationLayer> buildPresentationLayer(VulkanContext& boilerplate)
 {
-	using namespace std::views;
 	SwapChainProperties swapChainInfo = querySwapChainProperties(boilerplate);
-	auto useableFormats = swapChainInfo.formats | filter([](vk::SurfaceFormatKHR& s) {return s.format == vk::Format::eB8G8R8A8Srgb && s.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear; });
-	auto useableModes = swapChainInfo.presentModes | filter([](vk::PresentModeKHR& s) {return s == vk::PresentModeKHR::eFifo; });
+	auto useableFormat = std::find_if(swapChainInfo.formats.begin(), swapChainInfo.formats.end(), [](vk::SurfaceFormatKHR s) { return s.format == vk::Format::eB8G8R8A8Srgb && s.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear; });
+	auto useableModes = std::find_if(swapChainInfo.presentModes.begin(), swapChainInfo.presentModes.end(), [](vk::PresentModeKHR s) { return s == vk::PresentModeKHR::eFifo; });
+	
+	assert(useableFormat != swapChainInfo.formats.end());
+	assert(useableModes   != swapChainInfo.presentModes.end());
 
-	assert(!useableFormats.empty() && !useableModes.empty());
-	swapChainFormat_ = useableFormats.front().format;
+	
+	vk::SurfaceFormatKHR swapChainFormat = *useableFormat;
 
-	swapChainImageCount_ = chooseSwapChainImageCount(swapChainInfo);
-	swapChainExtent2D_ = chooseSwapChainImageExtent(boilerplate, swapChainInfo);
+	uint32_t swapChainImageCount = chooseSwapChainImageCount(swapChainInfo);
+	vk::Extent2D swapChainExtent2D = chooseSwapChainImageExtent(boilerplate, swapChainInfo);
 	std::vector<uint32_t> queueFamilies;
 
 	vk::SwapchainCreateInfoKHR createInfo(
 		vk::SwapchainCreateFlagsKHR(),
 		boilerplate.vkSurface,
-		swapChainImageCount_,
-		swapChainFormat_,
-		useableFormats.front().colorSpace,
-		swapChainExtent2D_,
+		swapChainImageCount,
+		swapChainFormat.format,
+		swapChainFormat.colorSpace,
+		swapChainExtent2D,
 		1,
 		vk::ImageUsageFlagBits::eColorAttachment,
 		vk::SharingMode::eExclusive,
@@ -131,81 +146,120 @@ void PresentationLayer::build(VulkanContext& boilerplate)
 		vk::CompositeAlphaFlagBitsKHR::eOpaque,
 		vk::PresentModeKHR::eFifo,
 		true);
-	swapChainDevice_ = boilerplate.vkDevice;
-	swapChain_ = boilerplate.vkDevice.createSwapchainKHR(createInfo);
+	vk::Device swapChainDevice = boilerplate.vkDevice;
+	VkDevice swapChainVkDevice = static_cast<VkDevice>(swapChainDevice);
+	auto swapChain = boilerplate.vkDevice.createSwapchainKHR(createInfo);
 
 	// get swapchain images
 	uint32_t imageCount;
-	vkGetSwapchainImagesKHR(swapChainDevice_.value(), static_cast<VkSwapchainKHR>(swapChain_.value()), &imageCount, nullptr);
+	VkResult imagesKHRResult;
+	imagesKHRResult = vkGetSwapchainImagesKHR(swapChainVkDevice, static_cast<VkSwapchainKHR>(swapChain), &imageCount, nullptr);
+	if (imagesKHRResult != VK_SUCCESS) { return std::optional<PresentationLayer>(); }
 	std::vector<VkImage> swapChainImagesRaw(imageCount);
-	vkGetSwapchainImagesKHR(swapChainDevice_.value(), static_cast<VkSwapchainKHR>(swapChain_.value()), &imageCount, swapChainImagesRaw.data());
+	imagesKHRResult = vkGetSwapchainImagesKHR(swapChainVkDevice, static_cast<VkSwapchainKHR>(swapChain), &imageCount, swapChainImagesRaw.data());
+	if (imagesKHRResult != VK_SUCCESS) { return std::optional<PresentationLayer>(); }
 
 	// convert the from VkImage to vk::Image
-	swapChainImages_.resize(imageCount);
-	std::ranges::transform(swapChainImagesRaw, swapChainImages_.begin(), [](VkImage v) { return vk::Image(v); });
+	immer::array<vk::Image, bainangua_memory_policy> swapChainImages = std::accumulate(
+		swapChainImagesRaw.begin(), 
+		swapChainImagesRaw.end(), 
+		immer::array<vk::Image, bainangua_memory_policy>(), 
+		[](immer::array<vk::Image> vs, VkImage v) { return vs.push_back(v); });
 
-	swapChainImageViews_.resize(imageCount);
-	std::ranges::transform(swapChainImages_, swapChainImageViews_.begin(),
-		[&](vk::Image i) {
-			vk::ImageViewCreateInfo viewInfo({}, i, vk::ImageViewType::e2D, swapChainFormat_, vk::ComponentMapping(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1), nullptr);
-			return swapChainDevice_.value().createImageView(viewInfo);
-		});
+	immer::array<vk::ImageView, bainangua_memory_policy> swapChainImageViews = std::accumulate(
+			swapChainImages.begin(),
+			swapChainImages.end(),
+			immer::array<vk::ImageView, bainangua_memory_policy>(),
+			[&](immer::array<vk::ImageView, bainangua_memory_policy> vs, vk::Image img) {
+				vk::ImageViewCreateInfo viewInfo({}, img, vk::ImageViewType::e2D, swapChainFormat.format, vk::ComponentMapping(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1), nullptr);
+				vk::ImageView iv =  swapChainDevice.createImageView(viewInfo);
+				return vs.push_back(iv);
+			});
+
+	immer::array<vk::Semaphore, bainangua_memory_policy> imageAvailableSemaphores;
+	immer::array<vk::Semaphore, bainangua_memory_policy> renderFinishedSemaphores;
+	immer::array<vk::Fence, bainangua_memory_policy> inFlightFences;
 
 	for (size_t index = 0; index < MultiFrameCount; index++) {
-		imageAvailableSemaphores_[index] = swapChainDevice_.value().createSemaphore({});
-		renderFinishedSemaphores_[index] = swapChainDevice_.value().createSemaphore({});
+		imageAvailableSemaphores = imageAvailableSemaphores.push_back(swapChainDevice.createSemaphore({}));
+		renderFinishedSemaphores = renderFinishedSemaphores.push_back(swapChainDevice.createSemaphore({}));
 
 		vk::FenceCreateInfo fenceInfo(vk::FenceCreateFlagBits::eSignaled);
-		inFlightFences_[index] = swapChainDevice_.value().createFence(fenceInfo);
+		inFlightFences = inFlightFences.push_back(swapChainDevice.createFence(fenceInfo));
 	}
+	
+	return PresentationLayer(
+		swapChainDevice,
+		swapChain,
+
+		swapChainFormat.format,
+		swapChainExtent2D,
+
+		swapChainImageCount,
+
+		imageAvailableSemaphores,
+		renderFinishedSemaphores,
+		inFlightFences,
+
+		swapChainImages,
+		swapChainImageViews,
+		immer::array<vk::Framebuffer, bainangua_memory_policy>()
+	);
 }
 
 void PresentationLayer::connectRenderPass(const vk::RenderPass& renderPass)
 {
 	teardownFramebuffers();
-	swapChainFramebuffers_.resize(swapChainImageCount_);
-	std::ranges::transform(swapChainImageViews_, swapChainFramebuffers_.begin(),
-		[&](vk::ImageView iv) {
-			vk::FramebufferCreateInfo framebufferInfo({}, renderPass, iv, swapChainExtent2D_.width, swapChainExtent2D_.height, 1);
-			return swapChainDevice_.value().createFramebuffer(framebufferInfo);
-		});
+	swapChainFramebuffers_ = immer::array<vk::Framebuffer, bainangua_memory_policy>();
+
+	immer::array<vk::Framebuffer, bainangua_memory_policy> swapChainFramebuffers
+		= std::accumulate(
+			swapChainImageViews_.begin(), 
+			swapChainImageViews_.end(), 
+			immer::array<vk::Framebuffer, bainangua_memory_policy>(),
+			[&](immer::array<vk::Framebuffer, bainangua_memory_policy> vs, vk::ImageView iv) {
+				vk::FramebufferCreateInfo framebufferInfo({}, renderPass, 1, &iv, swapChainExtent2D_.width, swapChainExtent2D_.height, 1);
+				vk::Framebuffer fb = swapChainDevice_.createFramebuffer(framebufferInfo);
+				return vs.push_back(fb);
+			});
+
+	swapChainFramebuffers_ = swapChainFramebuffers;
 }
 
 void PresentationLayer::teardownFramebuffers()
 {
-	std::ranges::for_each(swapChainFramebuffers_,
+	std::for_each(swapChainFramebuffers_.begin(), swapChainFramebuffers_.end(),
 		[&](vk::Framebuffer f) {
-			swapChainDevice_.value().destroyFramebuffer(f);
+			swapChainDevice_.destroyFramebuffer(f);
 		});
-	swapChainFramebuffers_.clear();
+	swapChainFramebuffers_ = immer::array<vk::Framebuffer, bainangua_memory_policy>();
 }
 
-void PresentationLayer::rebuildSwapChain(VulkanContext &s)
+std::optional<PresentationLayer> PresentationLayer::rebuildSwapChain(VulkanContext &s)
 {
 	s.vkDevice.waitIdle();
 
 	teardown();
 
-	build(s);
+	return buildPresentationLayer(s);
 }
 
 void PresentationLayer::teardown()
 {
 	if (swapChainDevice_ && swapChain_)
 	{
-		std::ranges::for_each(imageAvailableSemaphores_, [&](auto s) { swapChainDevice_.value().destroySemaphore(s); });
-		std::ranges::for_each(renderFinishedSemaphores_, [&](auto s) { swapChainDevice_.value().destroySemaphore(s); });
-		std::ranges::for_each(inFlightFences_,           [&](auto f) { swapChainDevice_.value().destroyFence(f); });
+		std::ranges::for_each(imageAvailableSemaphores_, [&](auto s) { swapChainDevice_.destroySemaphore(s); });
+		std::ranges::for_each(renderFinishedSemaphores_, [&](auto s) { swapChainDevice_.destroySemaphore(s); });
+		std::ranges::for_each(inFlightFences_,           [&](auto f) { swapChainDevice_.destroyFence(f); });
 
 		teardownFramebuffers();
 
 		std::ranges::for_each(swapChainImageViews_,
 			[&](vk::ImageView iv) {
-				swapChainDevice_.value().destroyImageView(iv);
+				swapChainDevice_.destroyImageView(iv);
 			});
-		swapChainImageViews_.clear();
-		swapChainDevice_.value().destroySwapchainKHR(swapChain_.value());
-		swapChain_.reset();
+		swapChainImageViews_ = immer::array<vk::ImageView>();
+		swapChainDevice_.destroySwapchainKHR(swapChain_);
 	}
 }
 

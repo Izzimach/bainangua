@@ -57,7 +57,7 @@ struct PipelineBundle
 export
 PipelineBundle createPipeline(const PresentationLayer &presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
-	vk::Device device = presentation.swapChainDevice_.value();
+	vk::Device device = presentation.swapChainDevice_;
 
 	std::pmr::vector<char> vertShaderCode = readFile(vertexShaderFile);
 	std::pmr::vector<char> fragShaderCode = readFile(fragmentShaderFile);
@@ -231,7 +231,7 @@ PipelineBundle createPipeline(const PresentationLayer &presentation, std::filesy
 export
 void destroyPipeline(const PresentationLayer &presentation, PipelineBundle& pipeline)
 {
-	vk::Device device = presentation.swapChainDevice_.value();
+	vk::Device device = presentation.swapChainDevice_;
 
 	device.destroyRenderPass(pipeline.renderPass);
 	device.destroyPipelineLayout(pipeline.pipelineLayout);

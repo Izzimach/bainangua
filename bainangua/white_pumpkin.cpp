@@ -77,8 +77,7 @@ int main()
 			.useValidation = true,
 #endif
 			.innerCode = [=](bainangua::VulkanContext& s) -> bool {
-				bainangua::PresentationLayer presenter(default_pmr_allocator);
-				presenter.build(s);
+				bainangua::PresentationLayer presenter = buildPresentationLayer(s).value();
 
 				std::filesystem::path shader_path = SHADER_DIR; // defined via CMake in white_pumpkin.hpp
 				bainangua::PipelineBundle pipeline(bainangua::createPipeline(presenter, (shader_path / "Basic.vert_spv"), (shader_path / "Basic.frag_spv")));

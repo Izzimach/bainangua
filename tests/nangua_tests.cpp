@@ -45,8 +45,7 @@ TEST(PresentationLayer, BasicTest)
 				},
 				.useValidation = false,
 				.innerCode = [](VulkanContext& s) -> bool {
-					PresentationLayer presenter;
-					presenter.build(s);
+					PresentationLayer presenter = buildPresentationLayer(s).value();
 
 					s.endOfFrame();
 
@@ -101,8 +100,7 @@ TEST(OneFrame, BasicTest)
 
 	// renders 10 frames and then stops
 	auto renderLoop = [&recordCommandBuffer](VulkanContext& s) -> bool {
-			bainangua::PresentationLayer presenter;
-			presenter.build(s);
+			PresentationLayer presenter = buildPresentationLayer(s).value();
 
 			std::filesystem::path shader_path = SHADER_DIR;
 			bainangua::PipelineBundle pipeline(bainangua::createPipeline(presenter, (shader_path / "Basic.vert_spv"), (shader_path / "Basic.frag_spv")));

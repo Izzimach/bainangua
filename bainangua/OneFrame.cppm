@@ -23,7 +23,7 @@ vk::Result drawOneFrame(VulkanContext& s, PresentationLayer& presenter, const Pi
 
 	// we don't use the "enhanced" version of acquireNextImageKHR since it throws on an OutOfDateKHR result
 	uint32_t imageIndex;
-	vk::Result acquireResult = s.vkDevice.acquireNextImageKHR(presenter.swapChain_.value(), UINT64_MAX, presenter.imageAvailableSemaphores_[multiFrameIndex], VK_NULL_HANDLE, &imageIndex);
+	vk::Result acquireResult = s.vkDevice.acquireNextImageKHR(presenter.swapChain_, UINT64_MAX, presenter.imageAvailableSemaphores_[multiFrameIndex], VK_NULL_HANDLE, &imageIndex);
 	if (acquireResult == vk::Result::eErrorOutOfDateKHR || acquireResult == vk::Result::eSuboptimalKHR || s.windowResized) {
 		s.windowResized = false;
 		presenter.rebuildSwapChain(s);
@@ -45,7 +45,7 @@ vk::Result drawOneFrame(VulkanContext& s, PresentationLayer& presenter, const Pi
 
 	vk::PresentInfoKHR presentInfo(
 		presenter.renderFinishedSemaphores_[multiFrameIndex],
-		presenter.swapChain_.value(),
+		presenter.swapChain_,
 		imageIndex,
 		nullptr
 	);
