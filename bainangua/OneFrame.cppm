@@ -39,7 +39,7 @@ vk::Result drawOneFrame(VulkanContext& s, PresentationLayer& presenter, const Pi
 	buffer.reset();
 	drawCommands(buffer, presenter.swapChainFramebuffers_[imageIndex]);
 
-	std::vector<vk::PipelineStageFlags> waitStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
+	vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 	vk::SubmitInfo submitInfo(presenter.imageAvailableSemaphores_[multiFrameIndex], waitStages, buffer, presenter.renderFinishedSemaphores_[multiFrameIndex]);
 	s.graphicsQueue.submit(submitInfo, presenter.inFlightFences_[multiFrameIndex]);
 

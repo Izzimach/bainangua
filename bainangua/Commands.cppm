@@ -20,7 +20,6 @@ export inline vk::CommandBufferAllocateInfo defaultCommandBuffer(vk::CommandPool
 	return vk::CommandBufferAllocateInfo(p, vk::CommandBufferLevel::ePrimary, 1);
 }
 
-
 export void withCommandPool(const VulkanContext& s, const vk::CommandPoolCreateInfo& info, std::function<void(vk::CommandPool)> wrapped)
 {
 	vk::CommandPool pool = s.vkDevice.createCommandPool(info);
@@ -34,9 +33,9 @@ export void withCommandPool(const VulkanContext& s, const vk::CommandPoolCreateI
 	s.vkDevice.destroyCommandPool(pool);
 }
 
-export void withCommandBuffers(const VulkanContext& s, const vk::CommandBufferAllocateInfo& info, std::function<void(std::vector<vk::CommandBuffer> &)> wrapped)
+export void withCommandBuffers(const VulkanContext& s, const vk::CommandBufferAllocateInfo& info, std::function<void(std::pmr::vector<vk::CommandBuffer> &)> wrapped)
 {
-	std::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers(info);
+	std::pmr::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(info);
 	try {
 		wrapped(buffers);
 	}
@@ -47,9 +46,9 @@ export void withCommandBuffers(const VulkanContext& s, const vk::CommandBufferAl
 	s.vkDevice.freeCommandBuffers(info.commandPool, buffers);
 }
 
-export void withCommandBuffer(const VulkanContext& s,vk::CommandPool pool, std::function<void(vk::CommandBuffer)> wrapped)
+export void withCommandBuffer(const VulkanContext& s, vk::CommandPool pool, std::function<void(vk::CommandBuffer)> wrapped)
 {
-	std::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
+	std::pmr::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
 	try {
 		wrapped(buffers[0]);
 	}

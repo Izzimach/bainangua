@@ -15,11 +15,11 @@ export module Pipeline;
 
 import PresentationLayer;
 
-std::vector<char> readFile(std::filesystem::path filePath)
+std::pmr::vector<char> readFile(std::filesystem::path filePath)
 {
 	size_t fileSize = std::filesystem::file_size(filePath);
 
-	std::vector<char> dataBuffer(fileSize);
+	std::pmr::vector<char> dataBuffer(fileSize);
 
 	boost::asio::io_context io;
 	boost::asio::stream_file fileHandle(io, filePath.string(), boost::asio::file_base::flags::read_only);
@@ -29,7 +29,7 @@ std::vector<char> readFile(std::filesystem::path filePath)
 	return dataBuffer;
 }
 
-vk::ShaderModule createShaderModule(vk::Device device, const std::vector<char>& shaderBytes)
+vk::ShaderModule createShaderModule(vk::Device device, const std::pmr::vector<char>& shaderBytes)
 {
 	vk::ShaderModuleCreateInfo createInfo(
 		vk::ShaderModuleCreateFlags(),
@@ -59,8 +59,8 @@ PipelineBundle createPipeline(const PresentationLayer &presentation, std::filesy
 {
 	vk::Device device = presentation.swapChainDevice_.value();
 
-	std::vector<char> vertShaderCode = readFile(vertexShaderFile);
-	std::vector<char> fragShaderCode = readFile(fragmentShaderFile);
+	std::pmr::vector<char> vertShaderCode = readFile(vertexShaderFile);
+	std::pmr::vector<char> fragShaderCode = readFile(fragmentShaderFile);
 
 	vk::ShaderModule vertexShaderModule = createShaderModule(device, vertShaderCode);
 	vk::ShaderModule fragmentShaderModule = createShaderModule(device, fragShaderCode);
@@ -79,7 +79,7 @@ PipelineBundle createPipeline(const PresentationLayer &presentation, std::filesy
 	);
 	vk::PipelineShaderStageCreateInfo shaderStagesInfo[] = { vertexCreateInfo, fragmentCreateInfo };
 
-	std::vector<vk::DynamicState> dynamicStates = {
+	vk::DynamicState dynamicStates[] = {
 		vk::DynamicState::eViewport,
 		vk::DynamicState::eScissor
 	};
@@ -213,7 +213,7 @@ PipelineBundle createPipeline(const PresentationLayer &presentation, std::filesy
 		-1,
 		nullptr
 	);
-	std::array<vk::GraphicsPipelineCreateInfo, 1> pipelines = { pipelineInfo };
+	vk::GraphicsPipelineCreateInfo pipelines[] = {pipelineInfo};
 	auto [result, graphicsPipelines] = device.createGraphicsPipelines(VK_NULL_HANDLE, pipelines);
 
 	if (result != vk::Result::eSuccess)

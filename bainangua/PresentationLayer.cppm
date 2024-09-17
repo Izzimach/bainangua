@@ -68,6 +68,8 @@ export constexpr uint32_t MultiFrameCount = 2;
 export struct PresentationLayer
 {
 	PresentationLayer() {}
+	PresentationLayer(std::pmr::polymorphic_allocator<> allocator)
+		: swapChainFramebuffers_(allocator), swapChainImages_(allocator), swapChainImageViews_(allocator) {}
 	~PresentationLayer() { teardown(); }
 
 	void build(VulkanContext& boilerplate);
@@ -84,7 +86,7 @@ export struct PresentationLayer
 	std::optional<vk::Device> swapChainDevice_;
 	std::optional<vk::SwapchainKHR> swapChain_;
 
-	std::vector<vk::Framebuffer> swapChainFramebuffers_;
+	std::pmr::vector<vk::Framebuffer> swapChainFramebuffers_;
 
 	std::array<vk::Semaphore, MultiFrameCount> imageAvailableSemaphores_;
 	std::array<vk::Semaphore, MultiFrameCount> renderFinishedSemaphores_;
@@ -94,8 +96,8 @@ private:
 
 	void teardownFramebuffers();
 
-	std::vector<vk::Image> swapChainImages_;
-	std::vector<vk::ImageView> swapChainImageViews_;
+	std::pmr::vector<vk::Image> swapChainImages_;
+	std::pmr::vector<vk::ImageView> swapChainImageViews_;
 };
 
 
@@ -140,8 +142,7 @@ void PresentationLayer::build(VulkanContext& boilerplate)
 
 	// convert the from VkImage to vk::Image
 	swapChainImages_.resize(imageCount);
-	std::ranges::transform(swapChainImagesRaw, swapChainImages_.begin(),
-		[](VkImage v) { return vk::Image(v); });
+	std::ranges::transform(swapChainImagesRaw, swapChainImages_.begin(), [](VkImage v) { return vk::Image(v); });
 
 	swapChainImageViews_.resize(imageCount);
 	std::ranges::transform(swapChainImages_, swapChainImageViews_.begin(),
