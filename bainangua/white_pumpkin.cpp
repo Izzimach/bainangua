@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fmt/format.h>
+#include <memory_resource>
 #include <vector>
 
 import Commands;
@@ -55,36 +56,44 @@ void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImag
 
 int main()
 {
-	bainangua::createVulkanContext(
+	// setup a pool arena for memory allocation.
+	// Many of the vulkan-hpp calls use the default allocator so we have to call set_default_resource here.
+	//
+	std::pmr::synchronized_pool_resource default_pmr_resource;
+	std::pmr::polymorphic_allocator<> default_pmr_allocator(&default_pmr_resource);
+	std::pmr::set_default_resource(&default_pmr_resource);
+
+	return bainangua::createVulkanContext(
 		bainangua::VulkanContextConfig{
 			.AppName = "My Test App",
 			.requiredExtensions = {
 				VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
 				VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
 			},
+			.allocator = default_pmr_allocator,
 #if NDEBUG
 			.useValidation = false,
 #else
 			.useValidation = true,
 #endif
-			.innerCode = [](bainangua::VulkanContext& s) -> bool {
+			.innerCode = [=](bainangua::VulkanContext& s) -> bool {
 				bainangua::PresentationLayer presenter;
 				presenter.build(s);
 
-				std::filesystem::path shader_path = SHADER_DIR;
+				std::filesystem::path shader_path = SHADER_DIR; // defined via CMake in white_pumpkin.hpp
 				bainangua::PipelineBundle pipeline(bainangua::createPipeline(presenter, (shader_path / "Basic.vert_spv"), (shader_path / "Basic.frag_spv")));
 
 				presenter.connectRenderPass(pipeline.renderPass);
 
 				vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
 
-				bainangua::withCommandPool(s, poolInfo, [&presenter, &s, &pipeline](vk::CommandPool pool) {
-					std::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, bainangua::MultiFrameCount));
+				bainangua::withCommandPool(s, poolInfo, [&](vk::CommandPool pool) {
+					std::pmr::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, bainangua::MultiFrameCount));
 
 					size_t multiFrameIndex = 0;
 					while (!glfwWindowShouldClose(s.glfwWindow)) {
 
-						auto result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&presenter, &pipeline](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
+						auto result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
 								recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline);
 							});
 						if (result != vk::Result::eSuccess &&

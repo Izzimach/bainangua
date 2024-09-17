@@ -9,7 +9,6 @@
 //
 module;
 
-
 #include "bainangua.hpp"
 
 #include <array>
@@ -18,6 +17,7 @@ module;
 #include <chrono>
 #include <coroutine>
 #include <functional>
+#include <memory_resource>
 #include <ranges>
 #include <string_view>
 #include <thread>
@@ -29,36 +29,6 @@ module;
 #include <fmt/format.h>
 
 export module VulkanContext;
-
-struct ReturnObject {
-    struct promise_type {
-        ReturnObject get_return_object() {
-            return {
-                    // Uses C++20 designated initializer syntax
-                    .h_ = std::coroutine_handle<promise_type>::from_promise(*this)
-                  }; 
-        }
-        std::suspend_never initial_suspend() { return {}; }
-        std::suspend_never final_suspend() noexcept { return {}; }
-        void unhandled_exception() {}
-        void return_void() {}
-    };
-
-    std::coroutine_handle<promise_type> h_;
-    operator std::coroutine_handle<promise_type>() const { return h_; }
-    // A coroutine_handle<promise_type> converts to coroutine_handle<>
-    operator std::coroutine_handle<>() const { return h_; }
-
-
-};
-
-ReturnObject counter()
-{
-    for (unsigned i = 0;; ++i) {
-        co_await std::suspend_always();
-        fmt::print("counter: {}\n", i);
-    }
-}
 
 
 namespace bainangua {
@@ -78,7 +48,9 @@ export struct VulkanContext {
     // your callback should call this at 'end-of-frame'
     std::coroutine_handle<> endOfFrame;
 
-    // flag that window was resized
+    std::pmr::polymorphic_allocator<> allocator;
+
+    // flag that the window was resized
     bool windowResized;
 };
 
@@ -87,10 +59,42 @@ export struct VulkanContextConfig {
     std::string EngineName{ "Default Vulkan Engine" };
     std::vector<std::string> requiredExtensions;
 
+    std::pmr::polymorphic_allocator<> allocator;
+
     bool useValidation;
 
     std::function<bool(VulkanContext&)> innerCode;
 };
+
+
+struct ReturnObject {
+    struct promise_type {
+        ReturnObject get_return_object() {
+            return {
+                // Uses C++20 designated initializer syntax
+                .h_ = std::coroutine_handle<promise_type>::from_promise(*this)
+            };
+        }
+        std::suspend_never initial_suspend() { return {}; }
+        std::suspend_never final_suspend() noexcept { return {}; }
+        void unhandled_exception() {}
+        void return_void() {}
+    };
+
+    std::coroutine_handle<promise_type> h_;
+    operator std::coroutine_handle<promise_type>() const { return h_; }
+    // A coroutine_handle<promise_type> converts to coroutine_handle<>
+    operator std::coroutine_handle<>() const { return h_; }
+};
+
+ReturnObject doNothingEndFrame()
+{
+    for (unsigned i = 0;; ++i) {
+        co_await std::suspend_always();
+        fmt::print("counter: {}\n", i);
+    }
+}
+
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT /*messageSeverity*/,
@@ -123,17 +127,17 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
     for (uint32_t ix = 0; ix < glfwExtensionCount; ix++) {
         fmt::print(" required: {}\n", glfwExtensions[ix]);
     }
-
     // put in copies of the extensions required by glfw
-    std::vector<std::string> totalExtensions = config.requiredExtensions;
+    std::pmr::vector<std::pmr::string> totalExtensions(config.allocator);
+    std::ranges::transform(config.requiredExtensions, std::back_inserter(totalExtensions), [&](std::string x) { return std::pmr::string(x, config.allocator); });
     std::ranges::transform(glfwExtensions, glfwExtensions + glfwExtensionCount, std::back_inserter(totalExtensions), [](auto x) {return x; });
 
     // add in debug layer
     totalExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
     // InstanceCreateInfo need the extensions as raw strings
-    std::vector<const char*> rawExtensionStrings;
-    std::ranges::transform(totalExtensions, std::back_inserter(rawExtensionStrings), [](std::string& s) { return s.c_str(); });
+    std::pmr::vector<const char*> rawExtensionStrings(config.allocator);
+    std::ranges::transform(totalExtensions, std::back_inserter(rawExtensionStrings), [](std::pmr::string& s) { return s.c_str(); });
 
     fmt::print("total required extensions:\n");
     for (uint32_t ix = 0; ix < rawExtensionStrings.size(); ix++) {
@@ -141,7 +145,7 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
     }
 
     // dump list of available extensions
-    auto vulkanExtensions = vk::enumerateInstanceExtensionProperties(nullptr);
+    std::pmr::vector<vk::ExtensionProperties> vulkanExtensions = vk::enumerateInstanceExtensionProperties<std::pmr::polymorphic_allocator<vk::ExtensionProperties>>(nullptr);
     fmt::print("{} extensions supported\n", vulkanExtensions.size());
     for (auto& prop : vulkanExtensions)
     {
@@ -149,13 +153,13 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
     }
 
     // check validation layers
-    std::vector<const char*> totalLayers;
+    std::pmr::vector<const char*> totalLayers(config.allocator);
     if (config.useValidation)
     {
-        totalLayers.push_back("VK_LAYER_KHRONOS_validation");
+        totalLayers.emplace_back("VK_LAYER_KHRONOS_validation");
     }
 
-    std::vector<vk::LayerProperties> vulkanLayers = vk::enumerateInstanceLayerProperties();
+    std::pmr::vector<vk::LayerProperties> vulkanLayers = vk::enumerateInstanceLayerProperties<std::pmr::polymorphic_allocator<vk::LayerProperties>>();
     auto validationLayers = vulkanLayers
         | std::views::transform([](vk::LayerProperties p) { std::string s = p.layerName; return s; })
         | std::views::filter([](std::string n) { return n == std::string("VK_LAYER_KHRONOS_validation"); });
@@ -186,25 +190,13 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
         messenger = messengerDeposit;
     }
 
-    assert(glfwVulkanSupported());
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    GLFWwindow *window = glfwCreateWindow(800, 600, config.AppName.c_str(), nullptr, nullptr);
-
-    VkSurfaceKHR surface;
-    VkResult err = glfwCreateWindowSurface(instance, window, nullptr, &surface);
-    if (err != VK_SUCCESS)
-    {
-        fmt::print("Error from glfwCreateWindowSurface: {}\n", +err);
-        return -1;
-    }
-
     // enumerate the physicalDevices
-    std::vector<vk::PhysicalDevice> physicalDevices = instance.enumeratePhysicalDevices();
+    std::pmr::vector<vk::PhysicalDevice> physicalDevices = instance.enumeratePhysicalDevices<std::pmr::polymorphic_allocator<vk::PhysicalDevice>>();
 
     // filter out devices that don't support a swapchain
     auto deviceSupportsSwapchain = [](vk::PhysicalDevice device) {
             // check device extensions
-            std::vector<vk::ExtensionProperties> deviceProperties = device.enumerateDeviceExtensionProperties();
+            std::pmr::vector<vk::ExtensionProperties> deviceProperties = device.enumerateDeviceExtensionProperties<std::pmr::polymorphic_allocator<vk::ExtensionProperties>>();
             fmt::print("{} device properties supported\n", deviceProperties.size());
             for (auto& prop : deviceProperties)
             {
@@ -223,10 +215,20 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
     auto swapchainDevices = std::views::filter(physicalDevices, deviceSupportsSwapchain);
     vk::PhysicalDevice physicalDevice = swapchainDevices.front();
 
+    assert(glfwVulkanSupported());
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    GLFWwindow* window = glfwCreateWindow(800, 600, config.AppName.c_str(), nullptr, nullptr);
 
+    VkSurfaceKHR surface;
+    VkResult err = glfwCreateWindowSurface(instance, window, nullptr, &surface);
+    if (err != VK_SUCCESS)
+    {
+        fmt::print("Error from glfwCreateWindowSurface: {}\n", +err);
+        return -1;
+    }
 
     // get the QueueFamilyProperties of the first PhysicalDevice
-    std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
+    std::pmr::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties<std::pmr::polymorphic_allocator<vk::QueueFamilyProperties>>();
 
     // get the first index into queueFamiliyProperties which supports graphics
     auto graphicsQueueIterator =
@@ -252,7 +254,7 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
     // are in different families then we create two queues, one for each family.
     //
     float queuePriority = 0.0f;
-    std::vector queues = { vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), graphicsQueueFamilyIndex, 1, &queuePriority) };
+    std::pmr::vector<vk::DeviceQueueCreateInfo> queues({ vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), graphicsQueueFamilyIndex, 1, &queuePriority) }, config.allocator);
     if (graphicsQueueFamilyIndex != presentQueueFamilyIndex.value())
     {
         queues.emplace_back(vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), presentQueueFamilyIndex.value(), 1, &queuePriority));
@@ -262,7 +264,7 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
     // create a Logical Device (finally!)
     //
     std::array<const char*, 0> layers;
-    std::vector<const char*> extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+    std::pmr::vector<const char*> extensions({ VK_KHR_SWAPCHAIN_EXTENSION_NAME }, config.allocator);
     vk::DeviceCreateInfo deviceInfo(
         vk::DeviceCreateFlags(),
         queues,
@@ -287,7 +289,7 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
 
     try
     {
-        VulkanContext vkState{instance, window, physicalDevice, device, surface, graphicsQueueFamilyIndex, graphicsQueue, presentQueueFamilyIndex.value(), presentQueue, counter(), false};
+        VulkanContext vkState{instance, window, physicalDevice, device, surface, graphicsQueueFamilyIndex, graphicsQueue, presentQueueFamilyIndex.value(), presentQueue, doNothingEndFrame(), config.allocator, false};
         glfwSetWindowUserPointer(window, &vkState);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
@@ -333,7 +335,5 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
 
     return runResult;
 }
-
-
 
 }
