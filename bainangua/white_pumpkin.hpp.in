@@ -1,5 +1,9 @@
 
+//
+// CMake will  fill this in via configure_file()
+//
 #cmakedefine ASSETS_DIR "@ASSETS_DIR@"
 
 #define SHADER_DIR ASSETS_DIR "/shaders"
 #define TEXTURES_DIR ASSETS_DIR "/textures"
+
