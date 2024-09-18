@@ -14,7 +14,7 @@ using namespace bainangua;
 
 namespace {
 
-TEST(Boilerplate, BasicTest)
+TEST(VulkanContext, BasicTest)
 {
 	EXPECT_NO_THROW(
 		createVulkanContext(
