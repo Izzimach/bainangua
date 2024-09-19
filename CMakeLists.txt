@@ -4,6 +4,9 @@
 
 cmake_minimum_required (VERSION 3.29)
 
+# A custom sphinx CMake file is in ./cmake, make sure CMake can find it
+set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
+
 
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141)
@@ -19,17 +22,27 @@ endif()
 
 #
 # main project and subdirectories
-#
 
 project ("bainangua")
 
-#
-# Assets directory
-#
 # Assets such as shaders and textures are put into an "assets/" directory in the build directory.
-#
 
 set(ASSETS_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets)
+
+#
+# documentation generation via doxygen
+
+find_package(Doxygen
+			 OPTIONAL_COMPONENTS dot mscgen dia)
+
+list(APPEND DOXYGEN_EXCLUDE_PATTERNS tanuki.hpp)
+set(DOXYGEN_GENERATE_HTML YES)
+set(DOXYGEN_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/doxygen)
+
+doxygen_add_docs(
+	doxygen
+	bainangua
+	)
 
 # library and example app
 

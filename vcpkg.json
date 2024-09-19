@@ -5,7 +5,8 @@
     "fmt",
     "glfw3",
     "gtest",
+    "immer",
     "vulkan",
-    "immer"
+    "vulkan-memory-allocator"
   ]
 }

@@ -70,7 +70,6 @@ int main()
 				VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
 				VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
 			},
-			.allocator = default_pmr_allocator,
 #if NDEBUG
 			.useValidation = false,
 #else

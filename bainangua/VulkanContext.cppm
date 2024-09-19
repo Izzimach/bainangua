@@ -33,8 +33,12 @@ export module VulkanContext;
 
 namespace bainangua {
     
+/*!
+ * A Vulkan context. This includes all the basic Vulkan data created upon initialization, such as
+ * a vk::Instance or vk::Device. This also includes a coroutine to call at the end of each frame.
+ */
 export struct VulkanContext {
-    vk::Instance vkInstance;
+    vk::Instance vkInstance;   //!< The vulkan instance. Don't destroy this yourself!
     GLFWwindow* glfwWindow;
     vk::PhysicalDevice vkPhysicalDevice;
     vk::Device vkDevice;
@@ -45,25 +49,22 @@ export struct VulkanContext {
     uint32_t presentQueueFamilyIndex;
     vk::Queue presentQueue;
 
-    // your callback should call this at 'end-of-frame'
-    std::coroutine_handle<> endOfFrame;
+    std::coroutine_handle<> endOfFrame; //!< your VulkanContextConfig::innerCode function should call this at 'end-of-frame'
 
-    std::pmr::polymorphic_allocator<> allocator;
+    VmaAllocator vmaAllocator; //!< for graphics memory allocation via vma
 
-    // flag that the window was resized
-    bool windowResized;
+    bool windowResized; //!< flag that the window was resized
 };
+
 
 export struct VulkanContextConfig {
     std::string AppName{ "Vulkan App" };
     std::string EngineName{ "Default Vulkan Engine" };
     std::vector<std::string> requiredExtensions;
 
-    std::pmr::polymorphic_allocator<> allocator;
-
     bool useValidation;
 
-    std::function<bool(VulkanContext&)> innerCode;
+    std::function<bool(VulkanContext&)> innerCode; //!< called once all the Vulkan handles are created for the VulkanContext
 };
 
 
@@ -124,23 +125,29 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
     uint32_t glfwExtensionCount;
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     fmt::print("{} extensions required by glfw\n", glfwExtensionCount);
-    for (uint32_t ix = 0; ix < glfwExtensionCount; ix++) {
+    for (uint32_t ix = 0; ix < glfwExtensionCount; ix++)
+    {
         fmt::print(" required: {}\n", glfwExtensions[ix]);
     }
+
     // put in copies of the extensions required by glfw
-    std::pmr::vector<std::pmr::string> totalExtensions(config.allocator);
-    std::ranges::transform(config.requiredExtensions, std::back_inserter(totalExtensions), [&](std::string x) { return std::pmr::string(x, config.allocator); });
-    std::ranges::transform(glfwExtensions, glfwExtensions + glfwExtensionCount, std::back_inserter(totalExtensions), [](auto x) {return x; });
+    //std::pmr::vector<std::pmr::string> totalExtensions(config.allocator);
+    bng_vector<std::string> totalExtensions;
+    std::ranges::for_each(config.requiredExtensions, [&](std::string x) { totalExtensions = totalExtensions.push_back(x); });
+    //std::transform(config.requiredExtensions.begin(), config.requiredExtensions.end(), std::back_inserter(totalExtensions), [&](std::string x) { return std::string(x); });
+    std::ranges::for_each(glfwExtensions, glfwExtensions + glfwExtensionCount, [&](auto x) { totalExtensions = totalExtensions.push_back(x); });
+    //std::transform(glfwExtensions, glfwExtensions + glfwExtensionCount, std::back_inserter(totalExtensions), [](auto x) {return x; });
 
     // add in debug layer
-    totalExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    totalExtensions = totalExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
     // InstanceCreateInfo need the extensions as raw strings
-    std::pmr::vector<const char*> rawExtensionStrings(config.allocator);
-    std::ranges::transform(totalExtensions, std::back_inserter(rawExtensionStrings), [](std::pmr::string& s) { return s.c_str(); });
+    std::pmr::vector<const char*> rawExtensionStrings;
+    std::ranges::for_each(totalExtensions.begin(), totalExtensions.end(), [&](const std::string& s) { rawExtensionStrings.push_back(s.c_str()); });
 
     fmt::print("total required extensions:\n");
-    for (uint32_t ix = 0; ix < rawExtensionStrings.size(); ix++) {
+    for (uint32_t ix = 0; ix < rawExtensionStrings.size(); ix++)
+    {
         fmt::print(" required: {}\n", rawExtensionStrings[ix]);
     }
 
@@ -153,7 +160,7 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
     }
 
     // check validation layers
-    std::pmr::vector<const char*> totalLayers(config.allocator);
+    std::pmr::vector<const char*> totalLayers;
     if (config.useValidation)
     {
         totalLayers.emplace_back("VK_LAYER_KHRONOS_validation");
@@ -252,19 +259,16 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
 
     // We look for a graphics queue and present queue. If they end up in the same family, we create one queue. If they
     // are in different families then we create two queues, one for each family.
-    //
     float queuePriority = 0.0f;
-    std::pmr::vector<vk::DeviceQueueCreateInfo> queues({ vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), graphicsQueueFamilyIndex, 1, &queuePriority) }, config.allocator);
+    std::pmr::vector<vk::DeviceQueueCreateInfo> queues{ vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), graphicsQueueFamilyIndex, 1, &queuePriority) };
     if (graphicsQueueFamilyIndex != presentQueueFamilyIndex.value())
     {
         queues.emplace_back(vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), presentQueueFamilyIndex.value(), 1, &queuePriority));
     }
     
-    //
     // create a Logical Device (finally!)
-    //
     std::array<const char*, 0> layers;
-    std::pmr::vector<const char*> extensions({ VK_KHR_SWAPCHAIN_EXTENSION_NAME }, config.allocator);
+    std::pmr::vector<const char*> extensions{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
     vk::DeviceCreateInfo deviceInfo(
         vk::DeviceCreateFlags(),
         queues,
@@ -273,8 +277,8 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
     );
     vk::Device device = physicalDevice.createDevice(deviceInfo);
 
-    // pull out the queues. They might be the same queue
     //
+    // pull out the queues. They might be the same queue
     vk::Queue graphicsQueue;
     vk::Queue presentQueue;
     device.getQueue(graphicsQueueFamilyIndex, 0, &graphicsQueue);
@@ -287,9 +291,35 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
         device.getQueue(presentQueueFamilyIndex.value(), 0, &presentQueue);
     }
 
+    // create a vmaAllocator
+    VmaAllocatorCreateInfo vmaInfo;
+    vmaInfo.flags = VmaAllocatorCreateFlags(0);
+    vmaInfo.physicalDevice = physicalDevice;
+    vmaInfo.device = device;
+    vmaInfo.preferredLargeHeapBlockSize = 0; // use default
+    vmaInfo.pAllocationCallbacks = nullptr; // maybe add later
+    vmaInfo.pDeviceMemoryCallbacks = nullptr;
+    vmaInfo.pHeapSizeLimit = nullptr;
+    vmaInfo.pVulkanFunctions = nullptr;
+    vmaInfo.instance = instance;
+    vmaInfo.vulkanApiVersion = VK_API_VERSION_1_2;
+#if VMA_EXTERNAL_MEMORY
+    vmaInfo.pTypeExternalMemoryHandleTypes = nullptr;
+#endif    
+    VmaAllocator graphicsAllocator;
+    VkResult vmaResult = vmaCreateAllocator(&vmaInfo, &graphicsAllocator);
+    if (vmaResult != VK_SUCCESS)
+    {
+        runResult = -1;
+    }
+
+    //
+    // initialization finished, call the user's function `innerCode`
+    //
+
     try
     {
-        VulkanContext vkState{instance, window, physicalDevice, device, surface, graphicsQueueFamilyIndex, graphicsQueue, presentQueueFamilyIndex.value(), presentQueue, doNothingEndFrame(), config.allocator, false};
+        VulkanContext vkState{instance, window, physicalDevice, device, surface, graphicsQueueFamilyIndex, graphicsQueue, presentQueueFamilyIndex.value(), presentQueue, doNothingEndFrame(), graphicsAllocator, false};
         glfwSetWindowUserPointer(window, &vkState);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
@@ -322,6 +352,9 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
         destroyDebugUtilsMessengerEXT(instance, messenger.value(), nullptr);
     }
 
+    vmaDestroyAllocator(graphicsAllocator);
+
+    glfwDestroyWindow(window);
     instance.destroySurfaceKHR(vk::SurfaceKHR(surface));
 
     // destroy the device
@@ -330,7 +363,6 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
     // destroy instace
     instance.destroy();
 
-    glfwDestroyWindow(window);
     glfwTerminate();
 
     return runResult;
