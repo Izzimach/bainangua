@@ -5,11 +5,10 @@ find_package(fmt REQUIRED)
 find_package(immer REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(Vulkan REQUIRED)
-find_package(VulkanMemoryAllocator CONFIG REQUIRED)
+find_package(VulkanMemoryAllocator REQUIRED)
 find_package(GTest REQUIRED)
 find_package(Boost REQUIRED COMPONENTS hana)
-find_package(boost_asio CONFIG REQUIRED)
-
+find_package(boost_asio REQUIRED)
 
 #
 # basic library, used by the main executable and test executable
@@ -41,7 +40,6 @@ target_link_libraries(bainangua PUBLIC immer)
 target_link_libraries(bainangua PUBLIC Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator)
 target_link_libraries(bainangua PUBLIC fmt::fmt)
 target_link_libraries(bainangua INTERFACE Boost::hana Boost::asio)
-
 
 #
 # experimental stuff
