@@ -4,10 +4,6 @@
 
 cmake_minimum_required (VERSION 3.29)
 
-# A custom sphinx CMake file is in ./cmake, make sure CMake can find it
-set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
-
-
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141)
   cmake_policy(SET CMP0141 NEW)
