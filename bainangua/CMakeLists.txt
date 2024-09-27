@@ -48,8 +48,6 @@ target_link_libraries(bainangua INTERFACE Boost::hana Boost::asio)
 #
 
 add_library(experimental_lib "RowType.cpp")
-
-
 target_compile_features(experimental_lib PUBLIC cxx_std_20)
 
 target_include_directories(experimental_lib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -110,5 +108,6 @@ endif()
 
 target_link_libraries(white_pumpkin PRIVATE Vulkan::Vulkan)
 target_link_libraries(white_pumpkin PRIVATE bainangua)
+target_link_libraries(white_pumpkin PRIVATE experimental_lib)
 
 add_dependencies(white_pumpkin shaders)

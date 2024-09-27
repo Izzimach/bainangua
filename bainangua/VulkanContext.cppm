@@ -130,13 +130,9 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
         fmt::print(" required: {}\n", glfwExtensions[ix]);
     }
 
-    // put in copies of the extensions required by glfw
-    //std::pmr::vector<std::pmr::string> totalExtensions(config.allocator);
-    bng_vector<std::string> totalExtensions;
+    bng_array<std::string> totalExtensions;
     std::ranges::for_each(config.requiredExtensions, [&](std::string x) { totalExtensions = totalExtensions.push_back(x); });
-    //std::transform(config.requiredExtensions.begin(), config.requiredExtensions.end(), std::back_inserter(totalExtensions), [&](std::string x) { return std::string(x); });
     std::ranges::for_each(glfwExtensions, glfwExtensions + glfwExtensionCount, [&](auto x) { totalExtensions = totalExtensions.push_back(x); });
-    //std::transform(glfwExtensions, glfwExtensions + glfwExtensionCount, std::back_inserter(totalExtensions), [](auto x) {return x; });
 
     // add in debug layer
     totalExtensions = totalExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);

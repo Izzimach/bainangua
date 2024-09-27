@@ -1,5 +1,4 @@
-
-
+﻿
 #include <boost/hana/assert.hpp>
 #include <boost/hana/contains.hpp>
 #include <boost/hana/integral_constant.hpp>
@@ -13,6 +12,8 @@
 #include <fmt/format.h>
 
 namespace RowType {
+
+	void testRowTypes();
 
 	template <typename Row, boost::hana::string FieldName, typename FieldType>
 	concept has_named_field = requires (Row s) {
@@ -71,4 +72,130 @@ namespace RowType {
 		return boost::hana::at_key(s, FieldName);
 	}
 
+
+	template <typename T>
+		requires has_named_field<T, BOOST_HANA_STRING(u8"白南瓜"), std::string>
+	constexpr std::string getArghField(T values)
+	{
+		std::string x = getRowField<BOOST_HANA_STRING(u8"白南瓜"), T>(values);
+		return x;
+	}
+
+
+
+	template <typename T>
+	[[nodiscard]] int instanceWrapper(T x) {
+		auto simpleRow = boost::hana::make_map(
+			boost::hana::make_pair(BOOST_HANA_STRING(u8"白南瓜"), std::string("blargh")),
+			boost::hana::make_pair(boost::hana::int_c<4>, 3.0f)
+		);
+
+		return x.toRow(simpleRow);
+	}
+
+	struct RowWrapperTag {};
+	struct RowFunctionTag {};
+
+	template <typename RowWrapper, typename RowFunction>
+	concept isRowWrapper =
+		std::is_same_v<typename RowWrapper::row_tag, RowWrapperTag>&&
+		std::is_same_v<typename RowFunction::row_tag, RowFunctionTag>;
+
+	template <typename RowWrapper1, typename RowWrapper2>
+	concept isRowWrapperCompose =
+		std::is_same_v<typename RowWrapper1::row_tag, RowWrapperTag>&&
+		std::is_same_v<typename RowWrapper2::row_tag, RowWrapperTag>;
+
+	template <typename RowWrapper, typename RowFunction>
+	struct ComposedRowFunction {
+		using row_tag = RowWrapperTag;
+		using return_type = RowWrapper::template return_type_transformer<RowFunction::return_type>;
+
+		template <typename Row>
+		static constexpr return_type applyRow(Row r) { return RowWrapper::wrapRowFunction(RowFunction(), r); }
+	};
+
+	template <typename RowWrapper1, typename RowWrapper2>
+	struct ComposedRowWrappers {
+		using row_tag = RowWrapperTag;
+
+		template <typename WrappedReturnType>
+		using return_type_transformer = RowWrapper1::template return_type_transformer<RowWrapper2::template return_type_transformer<WrappedReturnType>>;
+
+		template <typename RowFunction, typename Row>
+		static constexpr return_type_transformer<typename RowFunction::return_type> wrapRowFunction(RowFunction e, Row r) { return RowWrapper1::wrapRowFunction(ComposedRowFunction<RowWrapper2, RowFunction>(), r); }
+	};
+
+	template <typename RowWrapper, typename RowFunction>
+		requires isRowWrapper<RowWrapper, RowFunction>
+	constexpr auto operator | (RowWrapper w, RowFunction f) { return ComposedRowFunction<RowWrapper, RowFunction>(); };
+
+	template <typename RowWrapper1, typename RowWrapper2>
+		requires isRowWrapperCompose<RowWrapper1, RowWrapper2>
+	constexpr auto operator | (RowWrapper1 f, RowWrapper2 g) { return ComposedRowWrappers<RowWrapper1, RowWrapper2>(); };
+
+	struct ZeroRowFunction {
+		using row_tag = RowFunctionTag;
+		using return_type = decltype(3);
+
+		template<typename Row>
+		static constexpr double applyRow(Row) { return 0.0; }
+	};
+
+	struct PullFromMapFunction {
+		using row_tag = RowFunctionTag;
+		using return_type = int;
+
+		template <typename Row>
+		static constexpr int applyRow(Row r) {
+			static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("a"), std::string>, "Row must have field named 'a'");
+			return boost::hana::at_key(r, boost::hana::int_c<4>);
+		}
+	};
+
+	struct IdRowWrapper {
+		using row_tag = RowWrapperTag;
+
+		template <typename WrappedReturnType>
+		using return_type_transformer = WrappedReturnType;
+
+		template <typename RowFunction, typename Row>
+		static constexpr RowFunction::return_type wrapRowFunction(RowFunction, Row r) { return RowFunction::applyRow(r); }
+	};
+
+	struct OnlyReturnStringWrapper {
+		using row_tag = RowWrapperTag;
+
+		template <typename WrappedReturnType>
+		using return_type_transformer = std::string;
+
+		template <typename RowFunction, typename Row>
+		static constexpr std::string wrapRowFunction(RowFunction, Row r) {
+			[[maybediscard]] RowFunction::applyRow(r);
+			return std::string("argh");
+		}
+	};
+
+	struct AddOneRowWrapper {
+		using row_tag = RowWrapperTag;
+
+		template <typename WrappedReturnType>
+		using return_type_transformer = WrappedReturnType;
+
+		template <typename RowFunction, typename Row>
+		static constexpr RowFunction::return_type wrapRowFunction(RowFunction, Row r) { return 1 + RowFunction::applyRow(r); }
+	};
+
+	struct AddFieldWrapper {
+		using row_tag = RowWrapperTag;
+
+		template <typename WrappedReturnType>
+		using return_type_transformer = WrappedReturnType;
+
+		template <typename RowFunction, typename Row>
+		static constexpr RowFunction::return_type wrapRowFunction(RowFunction, Row r) {
+			auto r2 = boost::hana::insert(r, boost::hana::make_pair(boost::hana::int_c<4>, 8));
+			return RowFunction::applyRow(r2);
+		}
+	};
 }

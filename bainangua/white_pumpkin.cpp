@@ -2,10 +2,12 @@
 // 白南瓜 test application main entry point
 
 #include "bainangua.hpp"
+#include "RowType.hpp"
 #include "tanuki.hpp"
 #include "white_pumpkin.hpp"
 
 #include <algorithm>
+#include <concepts>
 #include <filesystem>
 #include <fmt/format.h>
 #include <memory_resource>
@@ -17,8 +19,7 @@ import OneFrame;
 import Pipeline;
 import PresentationLayer;
 
-void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, const bainangua::PresentationLayer &presenter, const bainangua::PipelineBundle &pipeline)
-{
+void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, const bainangua::PresentationLayer &presenter, const bainangua::PipelineBundle &pipeline) {
 	vk::CommandBufferBeginInfo beginInfo({}, {});
 	buffer.begin(beginInfo);
 
@@ -41,19 +42,18 @@ void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImag
 		static_cast<float>(presenter.swapChainExtent2D_.height),
 		0.0f,
 		1.0f
-	);
-	buffer.setViewport(0, 1, &viewport);
+			);
+			buffer.setViewport(0, 1, &viewport);
 
-	vk::Rect2D scissor({ 0,0 }, presenter.swapChainExtent2D_);
-	buffer.setScissor(0, 1, &scissor);
+			vk::Rect2D scissor({ 0,0 }, presenter.swapChainExtent2D_);
+			buffer.setScissor(0, 1, &scissor);
 
-	buffer.draw(3, 1, 0, 0);
+			buffer.draw(3, 1, 0, 0);
 
-	buffer.endRenderPass();
+			buffer.endRenderPass();
 
-	buffer.end();
+			buffer.end();
 }
-
 int main()
 {
 	// setup a pool arena for memory allocation.
@@ -62,6 +62,8 @@ int main()
 	std::pmr::synchronized_pool_resource default_pmr_resource;
 	std::pmr::polymorphic_allocator<> default_pmr_allocator(&default_pmr_resource);
 	std::pmr::set_default_resource(&default_pmr_resource);
+
+	RowType::testRowTypes();
 
 	return bainangua::createVulkanContext(
 		bainangua::VulkanContextConfig{
@@ -117,7 +119,4 @@ int main()
 			}
 		}
 	);
-
-
-	return 0;
 }
