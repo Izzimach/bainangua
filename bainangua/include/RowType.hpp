@@ -123,16 +123,8 @@ namespace RowType {
 		using return_type_transformer = RowWrapper1::template return_type_transformer<RowWrapper2::template return_type_transformer<WrappedReturnType>>;
 
 		template <typename RowFunction, typename Row>
-		static constexpr return_type_transformer<typename RowFunction::return_type> wrapRowFunction(RowFunction e, Row r) { return RowWrapper1::wrapRowFunction(ComposedRowFunction<RowWrapper2, RowFunction>(), r); }
+		static constexpr return_type_transformer<typename RowFunction::return_type> wrapRowFunction(RowFunction, Row r) { return RowWrapper1::wrapRowFunction(ComposedRowFunction<RowWrapper2, RowFunction>(), r); }
 	};
-
-	template <typename RowWrapper, typename RowFunction>
-		requires isRowWrapper<RowWrapper, RowFunction>
-	constexpr auto operator | (RowWrapper w, RowFunction f) { return ComposedRowFunction<RowWrapper, RowFunction>(); };
-
-	template <typename RowWrapper1, typename RowWrapper2>
-		requires isRowWrapperCompose<RowWrapper1, RowWrapper2>
-	constexpr auto operator | (RowWrapper1 f, RowWrapper2 g) { return ComposedRowWrappers<RowWrapper1, RowWrapper2>(); };
 
 	struct ZeroRowFunction {
 		using row_tag = RowFunctionTag;
@@ -199,3 +191,14 @@ namespace RowType {
 		}
 	};
 }
+
+// pipe composition is global, we'll avoid overload collision with concepts
+
+template <typename RowWrapper, typename RowFunction>
+	requires RowType::isRowWrapper<RowWrapper, RowFunction>
+constexpr auto operator | (RowWrapper, RowFunction) { return RowType::ComposedRowFunction<RowWrapper, RowFunction>(); };
+
+template <typename RowWrapper1, typename RowWrapper2>
+	requires RowType::isRowWrapperCompose<RowWrapper1, RowWrapper2>
+constexpr auto operator | (RowWrapper1, RowWrapper2) { return RowType::ComposedRowWrappers<RowWrapper1, RowWrapper2>(); };
+
