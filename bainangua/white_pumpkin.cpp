@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <concepts>
+#include <expected.hpp> // note: tl::expected for c++<23
 #include <filesystem>
 #include <fmt/format.h>
 #include <memory_resource>
@@ -65,7 +66,7 @@ int main()
 
 	RowType::testRowTypes();
 
-	return bainangua::createVulkanContext(
+	tl::expected<int, std::string> programResult = bainangua::createVulkanContext(
 		bainangua::VulkanContextConfig{
 			.AppName = "My Test App",
 			.requiredExtensions = {
@@ -119,4 +120,12 @@ int main()
 			}
 		}
 	);
+
+	if (programResult.has_value()) {
+		return programResult.value();
+	}
+	else {
+		fmt::print("program error: {}\n", programResult.error());
+		return -1;
+	}
 }

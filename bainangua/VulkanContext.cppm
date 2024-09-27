@@ -10,12 +10,17 @@
 module;
 
 #include "bainangua.hpp"
+#include "RowType.hpp"
 
 #include <array>
+#include <boost/asio.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <concepts>
 #include <coroutine>
 #include <chrono>
 #include <coroutine>
+#include <expected.hpp> // note: tl::expected for c++<23
+#include <fmt/format.h>
 #include <functional>
 #include <memory_resource>
 #include <ranges>
@@ -23,10 +28,6 @@ module;
 #include <thread>
 #include <vector>
 
-#include <boost/asio.hpp>
-#include <boost/asio/co_spawn.hpp>
-
-#include <fmt/format.h>
 
 export module VulkanContext;
 
@@ -114,8 +115,66 @@ static void framebufferResizeCallback(GLFWwindow* window, int /*width*/, int /*h
 }
 
 
+template <typename Row>
+tl::expected<int, std::string> invokeInnerCode(Row r)
+{
+    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig>, "Row must have field named 'config'");
+    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>, "Row must have field named 'instance'");
+    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("glfwWindow"), GLFWwindow*>, "Row must have field named 'glfwWindow'");
+    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("physicalDevice"), vk::PhysicalDevice>, "Row must have field named 'physicalDevice'");
+    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("device"), vk::Device>, "Row must have field named 'device'");
+    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("surface"), vk::SurfaceKHR>, "Row must have field named 'surface'");
+    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("graphicsQueueFamilyIndex"), uint32_t>, "Row must have field named 'graphicsQueueFamilyIndex'");
+    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("graphicsQueue"), vk::Queue>, "Row must have field named 'graphicsQueue'");
+    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("presentQueueFamilyIndex"), uint32_t>, "Row must have field named 'presentQueueFamilyIndex'");
+    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("presentQueue"), vk::Queue>, "Row must have field named 'presentQueue'");
+    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("vmaAllocator"), VmaAllocator>, "Row must have field named 'vmaAllocator'");
+
+    const VulkanContextConfig config  = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
+    vk::Instance instance             = boost::hana::at_key(r, BOOST_HANA_STRING("instance"));
+    GLFWwindow* window                = boost::hana::at_key(r, BOOST_HANA_STRING("glfwWindow"));
+    vk::PhysicalDevice physicalDevice = boost::hana::at_key(r, BOOST_HANA_STRING("physicalDevice"));
+    vk::Device device                 = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+    vk::SurfaceKHR surface            = boost::hana::at_key(r, BOOST_HANA_STRING("surface"));
+    uint32_t graphicsQueueFamilyIndex = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsQueueFamilyIndex"));
+    vk::Queue graphicsQueue           = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsQueue"));
+    uint32_t presentQueueFamilyIndex  = boost::hana::at_key(r, BOOST_HANA_STRING("presentQueueFamilyIndex"));
+    vk::Queue presentQueue            = boost::hana::at_key(r, BOOST_HANA_STRING("presentQueue"));
+    VmaAllocator graphicsAllocator    = boost::hana::at_key(r, BOOST_HANA_STRING("vmaAllocator"));
+
+    try
+    {
+        VulkanContext vkState{ instance, window, physicalDevice, device, surface, graphicsQueueFamilyIndex, graphicsQueue, presentQueueFamilyIndex, presentQueue, doNothingEndFrame(), graphicsAllocator, false };
+        glfwSetWindowUserPointer(window, &vkState);
+        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+
+        bool result = config.innerCode(vkState);
+        if (!result) {
+            fmt::print("inner code returned false\n");
+        }
+        glfwSetWindowUserPointer(window, nullptr);
+    }
+    catch (vk::SystemError& err)
+    {
+        fmt::print("vk::SystemError: {}\n", err.what());
+        return tl::make_unexpected(err.what());
+    }
+    catch (std::exception& err)
+    {
+        fmt::print("std::exception: {}\n", err.what());
+        return tl::make_unexpected(err.what());
+    }
+    catch (...)
+    {
+        fmt::print("unknown error!\n");
+        return tl::make_unexpected("unknown error!");
+    }
+
+    return 0;
+}
+
 export
-auto createVulkanContext(const VulkanContextConfig& config) -> int
+auto createVulkanContext(const VulkanContextConfig& config) -> tl::expected<int, std::string>
 {
     int runResult = 0;
 
@@ -313,34 +372,22 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
     // initialization finished, call the user's function `innerCode`
     //
 
-    try
-    {
-        VulkanContext vkState{instance, window, physicalDevice, device, surface, graphicsQueueFamilyIndex, graphicsQueue, presentQueueFamilyIndex.value(), presentQueue, doNothingEndFrame(), graphicsAllocator, false};
-        glfwSetWindowUserPointer(window, &vkState);
-        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
-        bool result = config.innerCode(vkState);
-        if (!result) {
-            fmt::print("inner code returned false\n");
-        }
-        glfwSetWindowUserPointer(window, nullptr);
-    }
-    catch (vk::SystemError& err)
-    {
-        fmt::print("vk::SystemError: {}\n", err.what());
-        runResult = -1;
-    }
-    catch (std::exception& err)
-    {
-        fmt::print("std::exception: {}\n", err.what());
-        runResult = -1;
-    }
-    catch (...)
-    {
-        fmt::print("unknown error!\n");
-        runResult = -1;
-    }
-   
+    auto innerRow = boost::hana::make_map(
+        boost::hana::make_pair(BOOST_HANA_STRING("config"), config),
+        boost::hana::make_pair(BOOST_HANA_STRING("instance"), instance),
+        boost::hana::make_pair(BOOST_HANA_STRING("glfwWindow"), window),
+        boost::hana::make_pair(BOOST_HANA_STRING("physicalDevice"), physicalDevice),
+        boost::hana::make_pair(BOOST_HANA_STRING("device"), device),
+        boost::hana::make_pair(BOOST_HANA_STRING("surface"), surface),
+        boost::hana::make_pair(BOOST_HANA_STRING("graphicsQueueFamilyIndex"), graphicsQueueFamilyIndex),
+        boost::hana::make_pair(BOOST_HANA_STRING("graphicsQueue"), graphicsQueue),
+        boost::hana::make_pair(BOOST_HANA_STRING("presentQueueFamilyIndex"), presentQueueFamilyIndex.value()),
+        boost::hana::make_pair(BOOST_HANA_STRING("presentQueue"), presentQueue),
+        boost::hana::make_pair(BOOST_HANA_STRING("vmaAllocator"), graphicsAllocator)
+        );
+    auto innerResult = invokeInnerCode(innerRow);
+
     // clean up debug callback
     if (messenger.has_value())
     {
@@ -361,7 +408,7 @@ auto createVulkanContext(const VulkanContextConfig& config) -> int
 
     glfwTerminate();
 
-    return runResult;
+    return innerResult;
 }
 
 }
