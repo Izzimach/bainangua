@@ -4,6 +4,8 @@
 #include "gtest/gtest.h"
 #include "nangua_tests.hpp"
 
+#include <expected.hpp>
+
 import OneFrame;
 import VulkanContext;
 import PresentationLayer;
@@ -168,9 +170,8 @@ TEST(OneFrame, BasicTest)
 				.innerCode = renderLoop
 			}
 		),
-		0
+		(tl::expected<int,std::string>(0))
 	);
-
 
 }
 
