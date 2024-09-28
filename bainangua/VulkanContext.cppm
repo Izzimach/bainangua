@@ -417,22 +417,12 @@ struct StandardVulkanInstance {
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig>, "Row must have field named 'config'");
         const VulkanContextConfig& config = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
 
-        // what extensions are required by GLFW?
-        uint32_t glfwExtensionCount;
-        const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-        fmt::print("{} extensions required by glfw\n", glfwExtensionCount);
-        for (uint32_t ix = 0; ix < glfwExtensionCount; ix++) {
-            fmt::print(" required: {}\n", glfwExtensions[ix]);
-        }
-
-        bng_array<std::string> totalExtensions;
-        std::ranges::for_each(config.requiredExtensions, [&](std::string x) { totalExtensions = totalExtensions.push_back(x); });
-        std::ranges::for_each(glfwExtensions, glfwExtensions + glfwExtensionCount, [&](auto x) { totalExtensions = totalExtensions.push_back(x); });
+        std::vector<std::string> totalExtensions = config.requiredExtensions;
 
         // add in debug layer
-        totalExtensions = totalExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        totalExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
-        // InstanceCreateInfo need the extensions as raw strings
+        // InstanceCreateInfo needs the extensions as raw strings
         std::pmr::vector<const char*> rawExtensionStrings;
         std::ranges::for_each(totalExtensions.begin(), totalExtensions.end(), [&](const std::string& s) { rawExtensionStrings.push_back(s.c_str()); });
 
@@ -459,8 +449,7 @@ struct StandardVulkanInstance {
             | std::views::transform([](vk::LayerProperties p) { std::string s = p.layerName; return s; })
             | std::views::filter([](std::string n) { return n == std::string("VK_LAYER_KHRONOS_validation"); });
         if (validationLayers.empty()) {
-            fmt::print("Vulkan layers do not contain VK_LAYER_KHRONOS_validation\n");
-            return -1;
+            return tl::make_unexpected("Vulkan layers do not contain VK_LAYER_KHRONOS_validation");
         }
 
         // create an Instance
@@ -509,9 +498,39 @@ struct GLFWOuterWrapper {
 
     template <typename RowFunction, typename Row>
     static constexpr RowFunction::return_type wrapRowFunction(RowFunction, Row r) {
+        static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig>, "Row must have field named 'config'");
+        const VulkanContextConfig &config = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
+
         glfwInit();
 
-        auto rowResult = RowFunction::applyRow(r);
+        // need to make sure the extensions required by GLFW are requested. Let's add them to the list of extensions
+        // in the config
+        uint32_t glfwExtensionCount;
+        const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+        std::vector<std::string> totalExtensions = config.requiredExtensions;
+        std::ranges::for_each(glfwExtensions, glfwExtensions + glfwExtensionCount,
+            [&](auto x) { 
+                if (std::find(totalExtensions.begin(), totalExtensions.end(), x) == totalExtensions.end()) {
+                    totalExtensions.emplace_back(x);
+                }
+            });
+
+        fmt::print("{} extensions required by glfw\n", glfwExtensionCount);
+        for (uint32_t ix = 0; ix < glfwExtensionCount; ix++) {
+            fmt::print(" required: {}\n", glfwExtensions[ix]);
+        }
+
+        // create a new config with the updated extensions, then add it to the row
+        VulkanContextConfig updatedConfig = config;
+        updatedConfig.requiredExtensions = totalExtensions;
+
+        auto rUpdatedConfig = boost::hana::insert(
+            boost::hana::erase_key(r, BOOST_HANA_STRING("config")),
+            boost::hana::make_pair(BOOST_HANA_STRING("config"), updatedConfig)
+        );
+
+        auto rowResult = RowFunction::applyRow(rUpdatedConfig);
 
         glfwTerminate();
 
