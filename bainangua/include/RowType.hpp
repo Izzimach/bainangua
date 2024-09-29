@@ -108,22 +108,32 @@ namespace RowType {
 
 	template <typename RowWrapper, typename RowFunction>
 	struct ComposedRowFunction {
+		ComposedRowFunction(RowWrapper w, RowFunction f) : w_(w), f_(f) {}
+
+		RowWrapper w_;
+		RowFunction f_;
+
 		using row_tag = RowWrapperTag;
 		using return_type = RowWrapper::template return_type_transformer<RowFunction::return_type>;
 
 		template <typename Row>
-		static constexpr return_type applyRow(Row r) { return RowWrapper::wrapRowFunction(RowFunction(), r); }
+		constexpr return_type applyRow(Row r) { return w_.wrapRowFunction(f_, r); }
 	};
 
 	template <typename RowWrapper1, typename RowWrapper2>
 	struct ComposedRowWrappers {
+		ComposedRowWrappers(RowWrapper1 w1, RowWrapper2 w2) : w1_(w1), w2_(w2) {}
+
+		RowWrapper1 w1_;
+		RowWrapper2 w2_;
+
 		using row_tag = RowWrapperTag;
 
 		template <typename WrappedReturnType>
 		using return_type_transformer = RowWrapper1::template return_type_transformer<RowWrapper2::template return_type_transformer<WrappedReturnType>>;
 
 		template <typename RowFunction, typename Row>
-		static constexpr return_type_transformer<typename RowFunction::return_type> wrapRowFunction(RowFunction, Row r) { return RowWrapper1::wrapRowFunction(ComposedRowFunction<RowWrapper2, RowFunction>(), r); }
+		constexpr return_type_transformer<typename RowFunction::return_type> wrapRowFunction(RowFunction f, Row r) { return w1_.wrapRowFunction(ComposedRowFunction<RowWrapper2, RowFunction>(w2_, f), r); }
 	};
 
 	struct ZeroRowFunction {
@@ -131,7 +141,7 @@ namespace RowType {
 		using return_type = double;
 
 		template<typename Row>
-		static constexpr double applyRow(Row) { return 0.0; }
+		constexpr double applyRow(Row) { return 0.0; }
 	};
 
 	struct PullFromMapFunction {
@@ -139,7 +149,7 @@ namespace RowType {
 		using return_type = int;
 
 		template <typename Row>
-		static constexpr int applyRow(Row r) {
+		constexpr int applyRow(Row r) {
 			static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("a"), std::string>, "Row must have field named 'a'");
 			return boost::hana::at_key(r, boost::hana::int_c<4>);
 		}
@@ -152,7 +162,7 @@ namespace RowType {
 		using return_type_transformer = WrappedReturnType;
 
 		template <typename RowFunction, typename Row>
-		static constexpr RowFunction::return_type wrapRowFunction(RowFunction, Row r) { return RowFunction::applyRow(r); }
+		constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) { return f.applyRow(r); }
 	};
 
 	struct OnlyReturnStringWrapper {
@@ -162,8 +172,8 @@ namespace RowType {
 		using return_type_transformer = std::string;
 
 		template <typename RowFunction, typename Row>
-		static constexpr std::string wrapRowFunction(RowFunction, Row r) {
-			[[maybediscard]] RowFunction::applyRow(r);
+		constexpr std::string wrapRowFunction(RowFunction f, Row r) {
+			[[maybediscard]] f.applyRow(r);
 			return std::string("argh");
 		}
 	};
@@ -175,7 +185,7 @@ namespace RowType {
 		using return_type_transformer = WrappedReturnType;
 
 		template <typename RowFunction, typename Row>
-		static constexpr RowFunction::return_type wrapRowFunction(RowFunction, Row r) { return 1 + RowFunction::applyRow(r); }
+		constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) { return 1 + f.applyRow(r); }
 	};
 
 	struct AddFieldWrapper {
@@ -185,9 +195,9 @@ namespace RowType {
 		using return_type_transformer = WrappedReturnType;
 
 		template <typename RowFunction, typename Row>
-		static constexpr RowFunction::return_type wrapRowFunction(RowFunction, Row r) {
+		constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
 			auto r2 = boost::hana::insert(r, boost::hana::make_pair(boost::hana::int_c<4>, 8));
-			return RowFunction::applyRow(r2);
+			return f.applyRow(r2);
 		}
 	};
 }
@@ -196,9 +206,9 @@ namespace RowType {
 
 template <typename RowWrapper, typename RowFunction>
 	requires RowType::isRowWrapper<RowWrapper, RowFunction>
-constexpr auto operator | (RowWrapper, RowFunction) { return RowType::ComposedRowFunction<RowWrapper, RowFunction>(); };
+constexpr auto operator | (RowWrapper w, RowFunction f) { return RowType::ComposedRowFunction<RowWrapper, RowFunction>(w,f); };
 
 template <typename RowWrapper1, typename RowWrapper2>
 	requires RowType::isRowWrapperCompose<RowWrapper1, RowWrapper2>
-constexpr auto operator | (RowWrapper1, RowWrapper2) { return RowType::ComposedRowWrappers<RowWrapper1, RowWrapper2>(); };
+constexpr auto operator | (RowWrapper1 w1, RowWrapper2 w2) { return RowType::ComposedRowWrappers<RowWrapper1, RowWrapper2>(w1,w2); };
 

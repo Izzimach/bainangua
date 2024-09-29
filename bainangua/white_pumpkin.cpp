@@ -2,13 +2,13 @@
 // 白南瓜 test application main entry point
 
 #include "bainangua.hpp"
+#include "expected.hpp" // note: tl::expected for c++<23
 #include "RowType.hpp"
 #include "tanuki.hpp"
 #include "white_pumpkin.hpp"
 
 #include <algorithm>
 #include <concepts>
-#include <expected.hpp> // note: tl::expected for c++<23
 #include <filesystem>
 #include <fmt/format.h>
 #include <memory_resource>
@@ -82,7 +82,12 @@ int main()
 				bainangua::PresentationLayer presenter = buildPresentationLayer(s).value();
 
 				std::filesystem::path shader_path = SHADER_DIR; // defined via CMake in white_pumpkin.hpp
-				bainangua::PipelineBundle pipeline(bainangua::createPipeline(presenter, (shader_path / "Basic.vert_spv"), (shader_path / "Basic.frag_spv")));
+				tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createPipeline(presenter, (shader_path / "Basic.vert_spv"), (shader_path / "Basic.frag_spv")));
+				if (!pipelineResult.has_value()) {
+					presenter.teardown();
+					return false;
+				}
+				bainangua::PipelineBundle pipeline = pipelineResult.value();
 
 				presenter.connectRenderPass(pipeline.renderPass);
 

@@ -12,6 +12,10 @@ module;
 #include "bainangua.hpp"
 #include "RowType.hpp"
 
+// we instantiate vk_result_to_string in this file
+#define VK_RESULT_TO_STRING_CONFIG_MAIN
+#include "vk_result_to_string.h"
+
 #include <array>
 #include <boost/asio.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -178,7 +182,7 @@ struct InvokeInnerCode {
     using return_type = tl::expected<int,std::string>;
 
     template<typename Row>
-    static constexpr tl::expected<int,std::string> applyRow(Row r) { return invokeInnerCode(r); }
+    constexpr tl::expected<int,std::string> applyRow(Row r) { return invokeInnerCode(r); }
 };
 
 struct StandardVMAAllocator {
@@ -188,7 +192,7 @@ struct StandardVMAAllocator {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
-    static constexpr RowFunction::return_type wrapRowFunction(RowFunction, Row r) {
+    constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>, "Row must have field named 'instance'");
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("physicalDevice"), vk::PhysicalDevice>, "Row must have field named 'physicalDevice'");
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("device"), vk::Device>, "Row must have field named 'device'");
@@ -223,7 +227,7 @@ struct StandardVMAAllocator {
             boost::hana::make_pair(BOOST_HANA_STRING("vmaAllocator"), graphicsAllocator)
         );
            
-        auto result = RowFunction::applyRow(rWithAllocator);
+        auto result = f.applyRow(rWithAllocator);
 
         vmaDestroyAllocator(graphicsAllocator);
 
@@ -238,7 +242,7 @@ struct StandardDevice {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
-    static constexpr RowFunction::return_type wrapRowFunction(RowFunction, Row r) {
+    constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>, "Row must have field named 'instance'");
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("physicalDevice"), vk::PhysicalDevice>, "Row must have field named 'physicalDevice'");
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("surface"), vk::SurfaceKHR>, "Row must have field named 'surface'");
@@ -311,7 +315,7 @@ struct StandardDevice {
             boost::hana::make_pair(BOOST_HANA_STRING("presentQueue"), presentQueue)
         );
         auto rWithDevice = boost::hana::fold_left(r, newFields, boost::hana::insert);
-        auto rowResult = RowFunction::applyRow(rWithDevice);
+        auto rowResult = f.applyRow(rWithDevice);
 
         device.destroy();
         return rowResult;
@@ -325,7 +329,7 @@ struct CreateGLFWWindowAndSurface {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
-    static constexpr RowFunction::return_type wrapRowFunction(RowFunction, Row r) {
+    constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig>, "Row must have field named 'config'");
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>, "Row must have field named 'instance'");
 
@@ -350,7 +354,7 @@ struct CreateGLFWWindowAndSurface {
             boost::hana::make_pair(BOOST_HANA_STRING("surface"), surface)
         );
         auto rWithWindow = boost::hana::fold_left(r, newFields, boost::hana::insert);
-        auto rowResult = RowFunction::applyRow(rWithWindow);
+        auto rowResult = f.applyRow(rWithWindow);
 
         instance.destroySurfaceKHR(vk::SurfaceKHR(surface));
         glfwDestroyWindow(window);
@@ -366,7 +370,7 @@ struct FirstSwapchainPhysicalDevice {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
-    static constexpr RowFunction::return_type wrapRowFunction(RowFunction, Row r) {
+    constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>, "Row must have field named 'instance'");
         vk::Instance instance = boost::hana::at_key(r, BOOST_HANA_STRING("instance"));
 
@@ -398,7 +402,7 @@ struct FirstSwapchainPhysicalDevice {
         auto rWithPhysicalDevice = boost::hana::insert(r,
             boost::hana::make_pair(BOOST_HANA_STRING("physicalDevice"), physicalDevice)
             );
-        auto wrappedResult = RowFunction::applyRow(rWithPhysicalDevice);
+        auto wrappedResult = f.applyRow(rWithPhysicalDevice);
 
         // we don't have to destroy physical devices!
 
@@ -413,7 +417,7 @@ struct StandardVulkanInstance {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
-    static constexpr RowFunction::return_type wrapRowFunction(RowFunction, Row r) {
+    constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig>, "Row must have field named 'config'");
         const VulkanContextConfig& config = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
 
@@ -475,7 +479,7 @@ struct StandardVulkanInstance {
         auto rWithInstance = boost::hana::insert(r,
             boost::hana::make_pair(BOOST_HANA_STRING("instance"), instance)
             );
-        auto wrappedResult = RowFunction::applyRow(rWithInstance);
+        auto wrappedResult = f.applyRow(rWithInstance);
 
         // clean up debug callback - this has to be done before destroying the instance
         if (messenger.has_value()) {
@@ -497,7 +501,7 @@ struct GLFWOuterWrapper {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
-    static constexpr RowFunction::return_type wrapRowFunction(RowFunction, Row r) {
+    constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig>, "Row must have field named 'config'");
         const VulkanContextConfig &config = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
 
@@ -530,7 +534,7 @@ struct GLFWOuterWrapper {
             boost::hana::make_pair(BOOST_HANA_STRING("config"), updatedConfig)
         );
 
-        auto rowResult = RowFunction::applyRow(rUpdatedConfig);
+        auto rowResult = f.applyRow(rUpdatedConfig);
 
         glfwTerminate();
 
