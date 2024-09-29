@@ -105,7 +105,12 @@ TEST(OneFrame, BasicTest)
 			PresentationLayer presenter = buildPresentationLayer(s).value();
 
 			std::filesystem::path shader_path = SHADER_DIR;
-			bainangua::PipelineBundle pipeline(bainangua::createPipeline(presenter, (shader_path / "Basic.vert_spv"), (shader_path / "Basic.frag_spv")));
+			tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createPipeline(presenter, (shader_path / "Basic.vert_spv"), (shader_path / "Basic.frag_spv")));
+			if (!pipelineResult.has_value()) {
+				presenter.teardown();
+				return false;
+			}
+			bainangua::PipelineBundle pipeline = pipelineResult.value();
 
 			presenter.connectRenderPass(pipeline.renderPass);
 

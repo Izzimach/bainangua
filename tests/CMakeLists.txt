@@ -36,7 +36,7 @@ gtest_discover_tests(nangua_test)
 # benchmark executable
 #
 
-add_executable(nangua_benchmark "nangua_benchmark.cpp")
+add_executable(nangua_benchmark "nangua_benchmark.cpp" "RowTypeBenchmarks.cpp" "ImmerBenchmarks.cpp")
 target_compile_features(nangua_test PUBLIC cxx_std_20)
 
 set(ASSETS_DIR ${ASSETS_BINARY_DIR})
@@ -49,6 +49,7 @@ target_include_directories(nangua_benchmark PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
 )
 
+target_link_libraries(nangua_benchmark PUBLIC immer)
 target_link_libraries(nangua_benchmark PRIVATE glfw)
 target_link_libraries(nangua_benchmark PRIVATE Vulkan::Vulkan)
 target_link_libraries(nangua_benchmark PRIVATE GTest::gtest_main)
