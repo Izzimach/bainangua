@@ -8,13 +8,13 @@ find_package(glfw3 REQUIRED)
 find_package(Vulkan REQUIRED)
 find_package(GTest REQUIRED)
 find_package(Boost REQUIRED)
+find_package(benchmark REQUIRED)
 
 add_executable(nangua_test "nangua_tests.cpp" "RowTypeTests.cpp")
 target_compile_features(nangua_test PUBLIC cxx_std_20)
 
 set(ASSETS_DIR ${ASSETS_BINARY_DIR})
-cmake_path(RELATIVE_PATH ASSETS_DIR
-           BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+cmake_path(RELATIVE_PATH ASSETS_DIR BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 
 configure_file(nangua_tests.hpp.in nangua_tests.hpp)
 
@@ -31,3 +31,29 @@ target_link_libraries(nangua_test PRIVATE bainangua)
 add_dependencies(nangua_test shaders)
 
 gtest_discover_tests(nangua_test)
+
+#
+# benchmark executable
+#
+
+add_executable(nangua_benchmark "nangua_benchmark.cpp")
+target_compile_features(nangua_test PUBLIC cxx_std_20)
+
+set(ASSETS_DIR ${ASSETS_BINARY_DIR})
+cmake_path(RELATIVE_PATH ASSETS_DIR BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+
+configure_file(nangua_tests.hpp.in nangua_tests.hpp)
+
+target_include_directories(nangua_benchmark PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+
+target_link_libraries(nangua_benchmark PRIVATE glfw)
+target_link_libraries(nangua_benchmark PRIVATE Vulkan::Vulkan)
+target_link_libraries(nangua_benchmark PRIVATE GTest::gtest_main)
+target_link_libraries(nangua_benchmark PRIVATE bainangua)
+target_link_libraries(nangua_benchmark PRIVATE benchmark::benchmark)
+target_link_libraries(nangua_benchmark INTERFACE Boost::hana)
+
+add_dependencies(nangua_benchmark shaders)

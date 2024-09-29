@@ -7,6 +7,7 @@
     "gtest",
     "immer",
     "vulkan",
-    "vulkan-memory-allocator"
+    "vulkan-memory-allocator",
+    "benchmark"
   ]
 }

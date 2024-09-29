@@ -128,7 +128,7 @@ namespace RowType {
 
 	struct ZeroRowFunction {
 		using row_tag = RowFunctionTag;
-		using return_type = decltype(3);
+		using return_type = double;
 
 		template<typename Row>
 		static constexpr double applyRow(Row) { return 0.0; }
