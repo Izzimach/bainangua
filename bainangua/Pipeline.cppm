@@ -57,6 +57,12 @@ struct PipelineBundle
 	vk::ShaderModule fragmentShaderModule;
 };
 
+template <typename RowFunction, typename Row>
+concept RowExpectsPipeline = requires (RowFunction f, Row r) {
+	{ f.applyRow(r) } -> std::convertible_to<tl::expected<PipelineBundle, std::string>>;
+};
+
+
 template <boost::hana::string ShaderName>
 struct CreateShaderModule {
 	CreateShaderModule(std::filesystem::path f) : shaderFile(f) {}
@@ -69,6 +75,7 @@ struct CreateShaderModule {
 	using return_type_transformer = WrappedReturnType;
 
 	template <typename RowFunction, typename Row>
+		requires RowExpectsPipeline<RowFunction, Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
 		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 
@@ -78,7 +85,11 @@ struct CreateShaderModule {
 		auto rWithShader = boost::hana::insert(r,
 			boost::hana::make_pair(ShaderName, shaderModule)
 		);
-		return f.applyRow(rWithShader);
+		tl::expected<PipelineBundle, std::string> applyResult = f.applyRow(rWithShader);
+		if (!applyResult.has_value()) {
+			device.destroyShaderModule(shaderModule);
+		}
+		return applyResult;
 	}
 };
 
@@ -137,8 +148,11 @@ struct CreateBasicRenderPass {
 		auto rWithRenderPass = boost::hana::insert(r,
 			boost::hana::make_pair(BOOST_HANA_STRING("renderPass"), renderPass)
 		);
-		return f.applyRow(rWithRenderPass);
-
+		tl::expected<PipelineBundle, std::string> applyResult = f.applyRow(rWithRenderPass);
+		if (!applyResult.has_value()) {
+			device.destroyRenderPass(renderPass);
+		}
+		return applyResult;
 	}
 };
 
@@ -163,7 +177,11 @@ struct CreateDefaultLayout {
 			boost::hana::make_pair(BOOST_HANA_STRING("layout"), pipelineLayout)
 		);
 
-		return f.applyRow(rWithLayout);
+		tl::expected<PipelineBundle, std::string> result = f.applyRow(rWithLayout);
+		if (!result.has_value()) {
+			device.destroyPipelineLayout(pipelineLayout);
+		}
+		return result;
 	}
 };
 
@@ -181,37 +199,16 @@ struct CreateSimplePipeline {
 		vk::ShaderModule vertexShaderModule = boost::hana::at_key(r, BOOST_HANA_STRING("vertexShader"));
 		vk::ShaderModule fragmentShaderModule = boost::hana::at_key(r, BOOST_HANA_STRING("fragmentShader"));
 
-		vk::PipelineShaderStageCreateInfo vertexCreateInfo(
-			{},
-			vk::ShaderStageFlagBits::eVertex,
-			vertexShaderModule,
-			"main"
-		);
-		vk::PipelineShaderStageCreateInfo fragmentCreateInfo(
-			{},
-			vk::ShaderStageFlagBits::eFragment,
-			fragmentShaderModule,
-			"main"
-		);
-		vk::PipelineShaderStageCreateInfo shaderStagesInfo[] = { vertexCreateInfo, fragmentCreateInfo };
+		vk::PipelineShaderStageCreateInfo shaderStagesInfo[] = {
+			vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eVertex, vertexShaderModule, "main"),
+			vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eFragment, fragmentShaderModule, "main")
+		};
+		
+		vk::PipelineVertexInputStateCreateInfo vertexInputInfo( {},	/* vertex binding */ 0, nullptr, /* vertex attributes */ 0, nullptr	);
+		
+		vk::PipelineInputAssemblyStateCreateInfo inputAssemblyInfo( {}, vk::PrimitiveTopology::eTriangleList, false /* no restart */);
 
-		vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
-			{},
-			0, nullptr, // vertex binding
-			0, nullptr  // vertex attributes
-		);
-
-		vk::PipelineInputAssemblyStateCreateInfo inputAssemblyInfo(
-			{},
-			vk::PrimitiveTopology::eTriangleList,
-			false // no restart
-		);
-
-		vk::PipelineViewportStateCreateInfo viewportStateInfo(
-			{},
-			1, nullptr,
-			1, nullptr
-		);
+		vk::PipelineViewportStateCreateInfo viewportStateInfo( {}, 1, nullptr, 1, nullptr );
 
 		vk::PipelineRasterizationStateCreateInfo rasterizerInfo(
 			{},
@@ -225,7 +222,7 @@ struct CreateSimplePipeline {
 			nullptr // pnext
 		);
 
-		vk::PipelineMultisampleStateCreateInfo multiSampleInfo({}, vk::SampleCountFlagBits::e1, false);
+		vk::PipelineMultisampleStateCreateInfo multiSampleInfo( {}, vk::SampleCountFlagBits::e1, false );
 
 		vk::PipelineColorBlendAttachmentState colorBlendAttachment(
 			false,
@@ -247,10 +244,7 @@ struct CreateSimplePipeline {
 			std::array<float, 4>{0, 0, 0, 0}
 		);
 
-		vk::DynamicState dynamicStates[] = {
-			vk::DynamicState::eViewport,
-			vk::DynamicState::eScissor
-		};
+		vk::DynamicState dynamicStates[] = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 		vk::PipelineDynamicStateCreateInfo dynamicStateInfo(vk::PipelineDynamicStateCreateFlags(), dynamicStates);
 
 		vk::GraphicsPipelineCreateInfo pipelineInfo(
@@ -277,10 +271,6 @@ struct CreateSimplePipeline {
 
 		if (result != vk::Result::eSuccess)
 		{
-			device.destroyPipelineLayout(pipelineLayout);
-			device.destroyShaderModule(vertexShaderModule);
-			device.destroyShaderModule(fragmentShaderModule);
-
 			std::string errorMessage;
 			fmt::format_to(std::back_inserter(errorMessage), "Failure creating pipeline: {}", vkResultToString(static_cast<VkResult>(result)));
 			return tl::make_unexpected(errorMessage);
@@ -290,7 +280,11 @@ struct CreateSimplePipeline {
 			boost::hana::make_pair(BOOST_HANA_STRING("pipelines"), graphicsPipelines)
 			);
 
-		return f.applyRow(rWithPipeline);
+		tl::expected<PipelineBundle, std::string> applyResult = f.applyRow(rWithPipeline);
+		if (!applyResult.has_value()) {
+			std::ranges::for_each(graphicsPipelines, [&](vk::Pipeline p) {device.destroyPipeline(p); });
+		}
+		return applyResult;
 	}
 };
 
