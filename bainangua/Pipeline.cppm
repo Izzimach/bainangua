@@ -82,9 +82,7 @@ struct CreateShaderModule {
 		std::pmr::vector<char> shaderCode = readFile(shaderFile);
 		vk::ShaderModule shaderModule = createShaderModule(device, shaderCode);
 		
-		auto rWithShader = boost::hana::insert(r,
-			boost::hana::make_pair(ShaderName, shaderModule)
-		);
+		auto rWithShader = boost::hana::insert(r,boost::hana::make_pair(ShaderName, shaderModule));
 		tl::expected<PipelineBundle, std::string> applyResult = f.applyRow(rWithShader);
 		if (!applyResult.has_value()) {
 			device.destroyShaderModule(shaderModule);
@@ -145,9 +143,7 @@ struct CreateBasicRenderPass {
 
 		vk::RenderPass renderPass = device.createRenderPass(renderPassInfo);
 
-		auto rWithRenderPass = boost::hana::insert(r,
-			boost::hana::make_pair(BOOST_HANA_STRING("renderPass"), renderPass)
-		);
+		auto rWithRenderPass = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("renderPass"), renderPass));
 		tl::expected<PipelineBundle, std::string> applyResult = f.applyRow(rWithRenderPass);
 		if (!applyResult.has_value()) {
 			device.destroyRenderPass(renderPass);
@@ -173,10 +169,7 @@ struct CreateDefaultLayout {
 		);
 		vk::PipelineLayout pipelineLayout = device.createPipelineLayout(pipelineLayoutInfo);
 
-		auto rWithLayout = boost::hana::insert(r,
-			boost::hana::make_pair(BOOST_HANA_STRING("layout"), pipelineLayout)
-		);
-
+		auto rWithLayout = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("layout"), pipelineLayout));
 		tl::expected<PipelineBundle, std::string> result = f.applyRow(rWithLayout);
 		if (!result.has_value()) {
 			device.destroyPipelineLayout(pipelineLayout);
@@ -276,10 +269,7 @@ struct CreateSimplePipeline {
 			return tl::make_unexpected(errorMessage);
 		}
 
-		auto rWithPipeline = boost::hana::insert(r,
-			boost::hana::make_pair(BOOST_HANA_STRING("pipelines"), graphicsPipelines)
-			);
-
+		auto rWithPipeline = boost::hana::insert(r,boost::hana::make_pair(BOOST_HANA_STRING("pipelines"), graphicsPipelines));
 		tl::expected<PipelineBundle, std::string> applyResult = f.applyRow(rWithPipeline);
 		if (!applyResult.has_value()) {
 			std::ranges::for_each(graphicsPipelines, [&](vk::Pipeline p) {device.destroyPipeline(p); });
