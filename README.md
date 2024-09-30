@@ -45,7 +45,7 @@ to create subsequent objects. For example:
 - ```vk::Surface``` -> ```vk::Device``` ```vk::Queue```
 
 All this interdependency makes it difficult to split all these creation events into different
-functions, so typically there is one large "make all the initial objects" function or all of the
+functions, so typically there is one large "make all the initial objects" function. Alternatively, all of the
 objects are dumped into an OOP-style class as they are created via class methods.
 
 The process used here is to break out each creation event into a separate function and then pass the
@@ -62,25 +62,24 @@ auto vulkanStages =
     | InvokeInnerCode();
 ```
 
-Each stage takes as input objects/values created by previous stages. Then the stage adds or modifies some values
+Each stage takes in objects/values created by previous stages. Then that stage adds or modifies values
 and passes them to the next stage. For instance, the ```StandardDevice()``` stage takes an ```vk::Instance``` and
-```vk::Surface``` passed as input, creates a ```vk::Device``` and passes that (along with it's inputs) to the next
-stage.
+```vk::Surface``` passed as input, creates a ```vk::Device``` and passes that (along with the original inputs) to
+the next stage.
 
 How do we package up all these objects between stages? We can't just use a struct holding all the objects, since
 the lifetimes of various objects are different.  We *could* use a struct full of ```std::optional```'s but
 then we need a whole bunch of extra noise in our struct and we also need to check ```has_value()``` a lot just
 to be safe.
 
-What we use here are *Row Polymorphic Types* or "Open Tuples" which utilize [Row Polymorphism](https://en.wikipedia.org/wiki/Row_polymorphism).
+What we can use instead are *Row Polymorphic Types* or "Open Tuples" which utilize [Row Polymorphism](https://en.wikipedia.org/wiki/Row_polymorphism).
 In effect these are anonymous structs with named fields. What makes then different from a typical C ```struct```?
 - You can add or remove fields from a Row Type at compile time, producing a new type.
 - Two Row types are "equal" if they have the same fields. This is structural typing, where two values are
   of the same type if they carry the same information structure. This is in contrast to "nominal typing" where two values are
-  the same type only if they have the same named type.
+  the same type only if they have the same type name.
 - A function can require or modify specific parts of a Row Type while ignoring the rest of it. 
   This allows you to write a function that (for example) accepts any type as input as long as that
   type has fields named "instance" and "config".
 
 The Row Types used here are currently ```boost::hana::map```'s, built and modified at compile time.
-
