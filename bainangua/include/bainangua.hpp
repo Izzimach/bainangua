@@ -28,4 +28,6 @@ namespace bainangua {
 
 	template <typename T>
 	using bng_vector = immer::vector<T, bainangua_memory_policy>;
+
+	using bng_errorobject = std::pmr::string;
 }
