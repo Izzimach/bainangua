@@ -17,6 +17,7 @@ module;
 export module Pipeline;
 
 import PresentationLayer;
+import VertexBuffer;
 
 namespace bainangua {
 
@@ -178,6 +179,37 @@ struct CreateDefaultLayout {
 	}
 };
 
+struct CreateNullVertexInfo {
+	using row_tag = RowType::RowWrapperTag;
+
+	template <typename WrappedReturnType>
+	using return_type_transformer = WrappedReturnType;
+
+	template <typename RowFunction, typename Row>
+	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+		vk::VertexInputBindingDescription bindingDescription{};
+		std::vector<vk::VertexInputAttributeDescription> attributes;
+		auto rWithVertexInput = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("vertexInput"), std::make_tuple(bindingDescription, attributes)));
+		return f.applyRow(rWithVertexInput);
+	}
+};
+
+// uses Vertex binding/attributes for the vertex struct from the vulkan tutorial
+struct CreateVTVertexInfo {
+	using row_tag = RowType::RowWrapperTag;
+
+	template <typename WrappedReturnType>
+	using return_type_transformer = WrappedReturnType;
+
+	template <typename RowFunction, typename Row>
+	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+		auto vertexInfo = getVTVertexBindingAndAttributes();
+		auto rWithVertexInput = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("vertexInput"), vertexInfo));
+		return f.applyRow(rWithVertexInput);
+	}
+
+};
+
 struct CreateSimplePipeline {
 	using row_tag = RowType::RowWrapperTag;
 
@@ -191,13 +223,14 @@ struct CreateSimplePipeline {
 		vk::PipelineLayout pipelineLayout = boost::hana::at_key(r, BOOST_HANA_STRING("layout"));
 		vk::ShaderModule vertexShaderModule = boost::hana::at_key(r, BOOST_HANA_STRING("vertexShader"));
 		vk::ShaderModule fragmentShaderModule = boost::hana::at_key(r, BOOST_HANA_STRING("fragmentShader"));
+		std::tuple<vk::VertexInputBindingDescription, std::vector<vk::VertexInputAttributeDescription>> vertexInput = boost::hana::at_key(r, BOOST_HANA_STRING("vertexInput"));
 
 		vk::PipelineShaderStageCreateInfo shaderStagesInfo[] = {
 			vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eVertex, vertexShaderModule, "main"),
 			vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eFragment, fragmentShaderModule, "main")
 		};
 		
-		vk::PipelineVertexInputStateCreateInfo vertexInputInfo( {},	/* vertex binding */ 0, nullptr, /* vertex attributes */ 0, nullptr	);
+		vk::PipelineVertexInputStateCreateInfo vertexInputInfo({},	std::get<0>(vertexInput), std::get<1>(vertexInput));
 		
 		vk::PipelineInputAssemblyStateCreateInfo inputAssemblyInfo( {}, vk::PrimitiveTopology::eTriangleList, false /* no restart */);
 
@@ -295,7 +328,7 @@ struct AssemblePipelineBundle {
 };
 
 export
-tl::expected<PipelineBundle, std::string> createPipeline(const PresentationLayer &presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
+tl::expected<PipelineBundle, std::string> createNoVertexPipeline(const PresentationLayer& presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
 	vk::Device device = presentation.swapChainDevice_;
 
@@ -306,6 +339,28 @@ tl::expected<PipelineBundle, std::string> createPipeline(const PresentationLayer
 	auto pipelineChain =
 		CreateShaderModule<BOOST_HANA_STRING("vertexShader")>(vertexShaderFile)
 		| CreateShaderModule<BOOST_HANA_STRING("fragmentShader")>(fragmentShaderFile)
+		| CreateNullVertexInfo()
+		| CreateBasicRenderPass()
+		| CreateDefaultLayout()
+		| CreateSimplePipeline()
+		| AssemblePipelineBundle();
+
+	return pipelineChain.applyRow(pipeRow);
+}
+
+export
+tl::expected<PipelineBundle, std::string> createVTVertexPipeline(const PresentationLayer& presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
+{
+	vk::Device device = presentation.swapChainDevice_;
+
+	auto pipeRow = boost::hana::make_map(
+		boost::hana::make_pair(BOOST_HANA_STRING("device"), device),
+		boost::hana::make_pair(BOOST_HANA_STRING("presentation"), presentation)
+	);
+	auto pipelineChain =
+		CreateShaderModule<BOOST_HANA_STRING("vertexShader")>(vertexShaderFile)
+		| CreateShaderModule<BOOST_HANA_STRING("fragmentShader")>(fragmentShaderFile)
+		| CreateVTVertexInfo()
 		| CreateBasicRenderPass()
 		| CreateDefaultLayout()
 		| CreateSimplePipeline()

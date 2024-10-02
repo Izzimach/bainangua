@@ -19,8 +19,9 @@ import VulkanContext;
 import OneFrame;
 import Pipeline;
 import PresentationLayer;
+import VertexBuffer;
 
-void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, const bainangua::PresentationLayer &presenter, const bainangua::PipelineBundle &pipeline) {
+void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, const bainangua::PresentationLayer &presenter, const bainangua::PipelineBundle &pipeline, VkBuffer vertexBuffer) {
 	vk::CommandBufferBeginInfo beginInfo({}, {});
 	buffer.begin(beginInfo);
 
@@ -44,17 +45,22 @@ void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImag
 		0.0f,
 		1.0f
 			);
-			buffer.setViewport(0, 1, &viewport);
+		buffer.setViewport(0, 1, &viewport);
 
-			vk::Rect2D scissor({ 0,0 }, presenter.swapChainExtent2D_);
-			buffer.setScissor(0, 1, &scissor);
+		vk::Rect2D scissor({ 0,0 }, presenter.swapChainExtent2D_);
+		buffer.setScissor(0, 1, &scissor);
 
-			buffer.draw(3, 1, 0, 0);
+		vk::Buffer vertexBuffers[] = { vertexBuffer };
+		vk::DeviceSize offsets[] = { 0 };
+		buffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
-			buffer.endRenderPass();
+		buffer.draw(3, 1, 0, 0);
 
-			buffer.end();
+		buffer.endRenderPass();
+
+		buffer.end();
 }
+
 int main()
 {
 	// setup a pool arena for memory allocation.
@@ -82,12 +88,15 @@ int main()
 				bainangua::PresentationLayer presenter = buildPresentationLayer(s).value();
 
 				std::filesystem::path shader_path = SHADER_DIR; // defined via CMake in white_pumpkin.hpp
-				tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createPipeline(presenter, (shader_path / "Basic.vert_spv"), (shader_path / "Basic.frag_spv")));
+				tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createVTVertexPipeline(presenter, (shader_path / "PosColor.vert_spv"), (shader_path / "PosColor.frag_spv")));
 				if (!pipelineResult.has_value()) {
 					presenter.teardown();
 					return false;
 				}
 				bainangua::PipelineBundle pipeline = pipelineResult.value();
+
+				auto vertexResult = bainangua::createVertexBuffer(s.vmaAllocator, bainangua::staticVertices);
+				auto [vertexBuffer, bufferMemory] = vertexResult.value();
 
 				presenter.connectRenderPass(pipeline.renderPass);
 
@@ -97,25 +106,31 @@ int main()
 					std::pmr::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, bainangua::MultiFrameCount));
 
 					size_t multiFrameIndex = 0;
+
 					while (!glfwWindowShouldClose(s.glfwWindow)) {
 
-						auto result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
-								recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline);
+						tl::expected<bainangua::PresentationLayer, vk::Result> result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
+								recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline, vertexBuffer);
 							});
-						if (result != vk::Result::eSuccess &&
-							result != vk::Result::eErrorOutOfDateKHR) {
+						if (result.has_value()) {
+							presenter = result.value();
+
+							glfwPollEvents();
+
+							s.endOfFrame();
+
+							multiFrameIndex = (multiFrameIndex + 1) % bainangua::MultiFrameCount;
+
+						}
+						else {
 							break;
 						}
-
-						glfwPollEvents();
-
-						s.endOfFrame();
-
-						multiFrameIndex = (multiFrameIndex + 1) % bainangua::MultiFrameCount;
 					}
 
 					s.vkDevice.waitIdle();
 				});
+
+				bainangua::destroyVertexBuffer(s.vmaAllocator, vertexBuffer, bufferMemory);
 
 				bainangua::destroyPipeline(presenter, pipeline);
 

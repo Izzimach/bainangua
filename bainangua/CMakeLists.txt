@@ -9,6 +9,17 @@ find_package(VulkanMemoryAllocator REQUIRED)
 find_package(GTest REQUIRED)
 find_package(Boost REQUIRED COMPONENTS hana)
 find_package(boost_asio REQUIRED)
+find_package(blaze REQUIRED)
+
+include(FetchContent)
+
+FetchContent_Declare(
+  qlibsreflect
+  GIT_REPOSITORY https://github.com/qlibs/reflect
+  GIT_TAG v1.2.3
+)
+
+FetchContent_MakeAvailable(qlibsreflect)
 
 #
 # basic library, used by the main executable and test executable
@@ -23,11 +34,13 @@ target_sources(bainangua
     PUBLIC
     FILE_SET bainangua_modules 
     TYPE CXX_MODULES 
-    FILES "OneFrame.cppm" "VulkanContext.cppm" "PresentationLayer.cppm" "Pipeline.cppm" "Commands.cppm")
+    FILES "OneFrame.cppm" "VulkanContext.cppm" "PresentationLayer.cppm" "Pipeline.cppm" "Commands.cppm" "VertexBuffer.cppm")
 
 target_include_directories(bainangua PUBLIC
 	${CMAKE_CURRENT_SOURCE_DIR}
-	${CMAKE_CURRENT_SOURCE_DIR}/include)
+	${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${qlibsreflect_SOURCE_DIR}
+    )
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     target_compile_options(bainangua PRIVATE /W4)
@@ -40,6 +53,7 @@ target_link_libraries(bainangua PUBLIC immer)
 target_link_libraries(bainangua PUBLIC Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator)
 target_link_libraries(bainangua PUBLIC fmt::fmt)
 target_link_libraries(bainangua INTERFACE Boost::hana Boost::asio)
+target_link_libraries(bainangua INTERFACE blaze::blaze)
 
 #
 # experimental stuff
@@ -63,6 +77,8 @@ target_link_libraries(experimental_lib INTERFACE Boost::hana Boost::asio)
 set(SHADER_FILES
     Basic.vert
     Basic.frag
+    PosColor.vert
+    PosColor.frag
     )
 
 set(SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/shaders")

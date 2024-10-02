@@ -73,6 +73,11 @@ tl::expected<PresentationLayer,vk::Result> drawOneFrame(VulkanContext& s, Presen
 		break; // don't retry
 	}
 
+	// I hope we never hit the retry limit
+	if (retryLimit == 0) {
+		return tl::make_unexpected(vk::Result::eErrorUnknown);
+	}
+
 	return presenter;
 }
 

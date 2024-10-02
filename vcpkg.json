@@ -1,5 +1,6 @@
 {
   "dependencies": [
+    "benchmark",
     "boost-asio",
     "boost-hana",
     "fmt",
@@ -8,6 +9,6 @@
     "immer",
     "vulkan",
     "vulkan-memory-allocator",
-    "benchmark"
+    "blaze"
   ]
 }

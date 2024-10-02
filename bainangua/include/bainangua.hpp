@@ -13,6 +13,7 @@
 #include <immer/memory_policy.hpp>
 #include <immer/array.hpp>
 #include <immer/vector.hpp>
+#include <expected.hpp>
 
 namespace bainangua {
 
