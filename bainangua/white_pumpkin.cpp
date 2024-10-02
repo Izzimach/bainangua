@@ -95,14 +95,14 @@ int main()
 				}
 				bainangua::PipelineBundle pipeline = pipelineResult.value();
 
-				auto vertexResult = bainangua::createVertexBuffer(s.vmaAllocator, bainangua::staticVertices);
-				auto [vertexBuffer, bufferMemory] = vertexResult.value();
-
 				presenter.connectRenderPass(pipeline.renderPass);
 
 				vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
 
 				bainangua::withCommandPool(s, poolInfo, [&](vk::CommandPool pool) {
+					auto vertexResult = bainangua::createGPUVertexBuffer(s.vmaAllocator, s, pool, bainangua::staticVertices);
+					auto [vertexBuffer, bufferMemory] = vertexResult.value();
+
 					std::pmr::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, bainangua::MultiFrameCount));
 
 					size_t multiFrameIndex = 0;
@@ -128,9 +128,10 @@ int main()
 					}
 
 					s.vkDevice.waitIdle();
+				
+					bainangua::destroyVertexBuffer(s.vmaAllocator, vertexBuffer, bufferMemory);
 				});
 
-				bainangua::destroyVertexBuffer(s.vmaAllocator, vertexBuffer, bufferMemory);
 
 				bainangua::destroyPipeline(presenter, pipeline);
 
