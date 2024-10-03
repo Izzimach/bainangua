@@ -30,10 +30,21 @@ auto getVTVertexBindingAndAttributes() -> std::tuple<vk::VertexInputBindingDescr
 	return {bindingDescription, attributes};
 }
 
-export std::vector<VTVertex> staticVertices = {
+export const std::vector<VTVertex> staticVertices = {
 	{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
 	{{0.5f, 0.5f},  {0.0f, 0.0f, 1.0f}},
 	{{-0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}}
+};
+
+export const std::vector<VTVertex> indexedStaticVertices = {
+	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+	{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+	{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+	{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+};
+
+export const std::vector<uint16_t> staticIndices = {
+	0, 1, 2, 2, 3, 0
 };
 
 export
@@ -43,13 +54,13 @@ auto createVertexBuffer(VmaAllocator allocator, const std::vector<V>& vertexData
 	VkBufferCreateInfo bufferCreateInfo{
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
 		.size = dataSize,
-		.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+		.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE
 	};
 	VmaAllocationCreateInfo vmaAllocateInfo{
 		.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
 		.usage = VMA_MEMORY_USAGE_AUTO,
-		.requiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		.requiredFlags = 0,
 		.preferredFlags = 0,
 		.memoryTypeBits = 0,
 		.pool = VK_NULL_HANDLE,
@@ -77,6 +88,33 @@ auto createVertexBuffer(VmaAllocator allocator, const std::vector<V>& vertexData
 }
 
 export
+auto copyBuffer(const VulkanContext& s, vk::CommandPool pool, VkBuffer source, VkBuffer dest, size_t dataSize) -> vk::Result {
+	std::pmr::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
+
+	vk::CommandBuffer commandBuffer = commandBuffers[0];
+
+	vk::CommandBufferBeginInfo beginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+	vk::Result commandBeginResult = commandBuffer.begin(&beginInfo);
+	if (commandBeginResult != vk::Result::eSuccess) {
+		s.vkDevice.freeCommandBuffers(pool, commandBuffers);
+		return commandBeginResult;
+	}
+
+	vk::BufferCopy copyRegion(0, 0, dataSize);
+	commandBuffer.copyBuffer(source, dest, 1, &copyRegion);
+	commandBuffer.end();
+
+	vk::SubmitInfo submitInfo(0, nullptr, nullptr, 1, &commandBuffer, 0, nullptr);
+
+	s.graphicsQueue.submit(submitInfo);
+	s.graphicsQueue.waitIdle();
+
+	s.vkDevice.freeCommandBuffers(pool, commandBuffers);
+
+	return vk::Result::eSuccess;
+}
+
+export
 template <typename V>
 auto createGPUVertexBuffer(VmaAllocator allocator, const VulkanContext& s, vk::CommandPool pool, const std::vector<V>& vertexData) -> tl::expected<std::tuple<vk::Buffer, VmaAllocation>, bainangua::bng_errorobject> {
 	// create two buffers, one on GPU and one host-visible
@@ -92,13 +130,13 @@ auto createGPUVertexBuffer(VmaAllocator allocator, const VulkanContext& s, vk::C
 	VkBufferCreateInfo bufferCreateInfo{
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
 		.size = dataSize,
-		.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+		.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE
 	};
 	VmaAllocationCreateInfo vmaAllocateInfo{
 		.flags = 0,
-		.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE ,
-		.requiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+		.requiredFlags = 0,
 		.preferredFlags = 0,
 		.memoryTypeBits = 0,
 		.pool = VK_NULL_HANDLE,
@@ -114,33 +152,84 @@ auto createGPUVertexBuffer(VmaAllocator allocator, const VulkanContext& s, vk::C
 		return tl::make_unexpected("createGPUVertexBuffer: vmaCreateBuffer failed");
 	}
 
-	std::pmr::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
-
-	
-	vk::CommandBuffer commandBuffer = commandBuffers[0];
-
-	vk::CommandBufferBeginInfo beginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-	vk::Result commandBeginResult = commandBuffer.begin(&beginInfo);
-	if (commandBeginResult != vk::Result::eSuccess) {
-		s.vkDevice.freeCommandBuffers(pool, commandBuffers);
+	vk::Result copyResult = copyBuffer(s, pool, hostBuffer, GPUbuffer, dataSize);
+	if (copyResult != vk::Result::eSuccess) {
 		vmaDestroyBuffer(allocator, hostBuffer, hostAllocation);
 		vmaDestroyBuffer(allocator, GPUbuffer, GPUallocation);
 		return tl::make_unexpected("createGPUVertexBuffer: begin command buffer failed");
 	}
 
-	vk::BufferCopy copyRegion(0,0,dataSize);
-	commandBuffer.copyBuffer(hostBuffer, GPUbuffer, 1, &copyRegion);
-	
-	commandBuffer.end();
-	
-	vk::SubmitInfo submitInfo(0, nullptr, nullptr, 1, &commandBuffer, 0, nullptr);
-
-	s.graphicsQueue.submit(submitInfo);
-	s.graphicsQueue.waitIdle();
-
-	s.vkDevice.freeCommandBuffers(pool, commandBuffers);
-
 	vmaDestroyBuffer(allocator, hostBuffer, hostAllocation);
+
+	return std::make_tuple(GPUbuffer, GPUallocation);
+}
+
+export
+template <typename Index>
+auto createGPUIndexBuffer(VmaAllocator allocator, const VulkanContext& s, vk::CommandPool pool, const std::vector<Index> &indices) -> tl::expected<std::tuple<vk::Buffer, VmaAllocation>, bainangua::bng_errorobject> {
+	VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+	VkBufferCreateInfo bufferCreateInfo{
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.size = bufferSize,
+		.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE
+	};
+	VmaAllocationCreateInfo vmaAllocateInfo{
+		.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+		.usage = VMA_MEMORY_USAGE_AUTO,
+		.requiredFlags = 0,
+		.preferredFlags = 0,
+		.memoryTypeBits = 0,
+		.pool = VK_NULL_HANDLE,
+		.pUserData = nullptr,
+		.priority = 0.0f
+	};
+	VkBuffer stagingBuffer;
+	VmaAllocation stagingAllocation;
+	auto vkResult = vmaCreateBuffer(allocator, &bufferCreateInfo, &vmaAllocateInfo, &stagingBuffer, &stagingAllocation, nullptr);
+	if (vkResult != VK_SUCCESS) {
+		return tl::make_unexpected("createGPUIndexBuffer: vmaCreateBuffer for staging buffer failed");
+	}
+	VmaAllocationInfo StagingInfo;
+	vmaGetAllocationInfo(allocator, stagingAllocation, &StagingInfo);
+	if (StagingInfo.pMappedData == nullptr) {
+		vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
+		return tl::make_unexpected("createGPUIndexBuffer: vmaCreateBuffer for staging buffer not mapped");
+	}
+
+
+
+	VkBufferCreateInfo GPUbufferCreateInfo{
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.size = bufferSize,
+		.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE
+	};
+	VmaAllocationCreateInfo GPUvmaAllocateInfo{
+		.flags = 0,
+		.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+		.requiredFlags = 0,
+		.preferredFlags = 0,
+		.memoryTypeBits = 0,
+		.pool = VK_NULL_HANDLE,
+		.pUserData = nullptr,
+		.priority = 0.0f
+	};
+
+	VkBuffer GPUbuffer;
+	VmaAllocation GPUallocation;
+	auto GPUResult = vmaCreateBuffer(allocator, &GPUbufferCreateInfo, &GPUvmaAllocateInfo, &GPUbuffer, &GPUallocation, nullptr);
+	if (GPUResult != VK_SUCCESS) {
+		vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
+		return tl::make_unexpected("createGPUIndexBuffer: vmaCreateBuffer for GPU failed");
+	}
+
+	memcpy(StagingInfo.pMappedData, indices.data(), (size_t)bufferSize);
+
+	copyBuffer(s, pool, stagingBuffer, GPUbuffer, bufferSize);
+
+	vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
 
 	return std::make_tuple(GPUbuffer, GPUallocation);
 }

@@ -21,7 +21,7 @@ import Pipeline;
 import PresentationLayer;
 import VertexBuffer;
 
-void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, const bainangua::PresentationLayer &presenter, const bainangua::PipelineBundle &pipeline, VkBuffer vertexBuffer) {
+void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, const bainangua::PresentationLayer &presenter, const bainangua::PipelineBundle &pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer) {
 	vk::CommandBufferBeginInfo beginInfo({}, {});
 	buffer.begin(beginInfo);
 
@@ -54,7 +54,9 @@ void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImag
 		vk::DeviceSize offsets[] = { 0 };
 		buffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
-		buffer.draw(3, 1, 0, 0);
+		buffer.bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint16);
+
+		buffer.drawIndexed(static_cast<uint32_t>(bainangua::staticIndices.size()), 1, 0, 0, 0);
 
 		buffer.endRenderPass();
 
@@ -100,8 +102,11 @@ int main()
 				vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
 
 				bainangua::withCommandPool(s, poolInfo, [&](vk::CommandPool pool) {
-					auto vertexResult = bainangua::createGPUVertexBuffer(s.vmaAllocator, s, pool, bainangua::staticVertices);
+					auto vertexResult = bainangua::createGPUVertexBuffer(s.vmaAllocator, s, pool, bainangua::indexedStaticVertices);
 					auto [vertexBuffer, bufferMemory] = vertexResult.value();
+
+					auto indexResult = bainangua::createGPUIndexBuffer(s.vmaAllocator, s, pool, bainangua::staticIndices);
+					auto [indexBuffer, indexBufferMemory] = indexResult.value();
 
 					std::pmr::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, bainangua::MultiFrameCount));
 
@@ -110,7 +115,7 @@ int main()
 					while (!glfwWindowShouldClose(s.glfwWindow)) {
 
 						tl::expected<bainangua::PresentationLayer, vk::Result> result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
-								recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline, vertexBuffer);
+								recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline, vertexBuffer, indexBuffer);
 							});
 						if (result.has_value()) {
 							presenter = result.value();
@@ -130,6 +135,7 @@ int main()
 					s.vkDevice.waitIdle();
 				
 					bainangua::destroyVertexBuffer(s.vmaAllocator, vertexBuffer, bufferMemory);
+					bainangua::destroyVertexBuffer(s.vmaAllocator, indexBuffer, indexBufferMemory);
 				});
 
 
