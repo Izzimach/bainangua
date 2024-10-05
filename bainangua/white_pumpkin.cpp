@@ -20,8 +20,10 @@ import OneFrame;
 import Pipeline;
 import PresentationLayer;
 import VertexBuffer;
+import UniformBuffer;
+import DescriptorSets;
 
-void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, const bainangua::PresentationLayer &presenter, const bainangua::PipelineBundle &pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer) {
+void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, const bainangua::PresentationLayer &presenter, const bainangua::PipelineBundle &pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer, vk::DescriptorSet uboDescriptorSet) {
 	vk::CommandBufferBeginInfo beginInfo({}, {});
 	buffer.begin(beginInfo);
 
@@ -55,6 +57,8 @@ void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImag
 		buffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
 		buffer.bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint16);
+
+		buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipelineLayout, 0, 1, &uboDescriptorSet,0,nullptr);
 
 		buffer.drawIndexed(static_cast<uint32_t>(bainangua::staticIndices.size()), 1, 0, 0, 0);
 
@@ -90,7 +94,7 @@ int main()
 				bainangua::PresentationLayer presenter = buildPresentationLayer(s).value();
 
 				std::filesystem::path shader_path = SHADER_DIR; // defined via CMake in white_pumpkin.hpp
-				tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createVTVertexPipeline(presenter, (shader_path / "PosColor.vert_spv"), (shader_path / "PosColor.frag_spv")));
+				tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createMVPVertexPipeline(presenter, (shader_path / "PosColorMVP.vert_spv"), (shader_path / "PosColor.frag_spv")));
 				if (!pipelineResult.has_value()) {
 					presenter.teardown();
 					return false;
@@ -108,17 +112,29 @@ int main()
 					auto indexResult = bainangua::createGPUIndexBuffer(s.vmaAllocator, s, pool, bainangua::staticIndices);
 					auto [indexBuffer, indexBufferMemory] = indexResult.value();
 
+					auto uniformBuffers = bainangua::createUniformBuffers(s.vmaAllocator).value();
+					auto descriptorPoolResult = bainangua::createDescriptorPool(s);
+					if (!descriptorPoolResult.has_value()) {
+						return;
+					}
+					vk::DescriptorPool descriptorPool = descriptorPoolResult.value();
+					vk::DescriptorSetLayout layout = bainangua::createDescriptorSetLayout(s.vkDevice).value();
+					auto descriptorSets = bainangua::createDescriptorSets(s, descriptorPool, layout).value();
+					auto linkResult = bainangua::linkUBOAndDescriptors(s, uniformBuffers, descriptorSets);
+
 					std::pmr::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, bainangua::MultiFrameCount));
 
 					size_t multiFrameIndex = 0;
 
 					while (!glfwWindowShouldClose(s.glfwWindow)) {
 
+						updateUniformBuffer(presenter, uniformBuffers[multiFrameIndex]);
 						tl::expected<bainangua::PresentationLayer, vk::Result> result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
-								recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline, vertexBuffer, indexBuffer);
+								recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline, vertexBuffer, indexBuffer, descriptorSets[multiFrameIndex]);
 							});
 						if (result.has_value()) {
 							presenter = result.value();
+
 
 							glfwPollEvents();
 
@@ -136,6 +152,11 @@ int main()
 				
 					bainangua::destroyVertexBuffer(s.vmaAllocator, vertexBuffer, bufferMemory);
 					bainangua::destroyVertexBuffer(s.vmaAllocator, indexBuffer, indexBufferMemory);
+					for (auto& ubo : uniformBuffers) {
+						bainangua::destroyUniformBuffer(s.vmaAllocator, ubo);
+					}
+					s.vkDevice.destroyDescriptorPool(descriptorPool);
+					s.vkDevice.destroyDescriptorSetLayout(layout);
 				});
 
 

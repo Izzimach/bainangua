@@ -18,6 +18,7 @@ export module Pipeline;
 
 import PresentationLayer;
 import VertexBuffer;
+import UniformBuffer;
 
 namespace bainangua {
 
@@ -56,11 +57,12 @@ struct PipelineBundle
 	vk::PipelineLayout pipelineLayout;
 	vk::ShaderModule vertexShaderModule;
 	vk::ShaderModule fragmentShaderModule;
+	std::optional<vk::DescriptorSetLayout> descriptorLayout;
 };
 
 template <typename RowFunction, typename Row>
 concept RowExpectsPipeline = requires (RowFunction f, Row r) {
-	{ f.applyRow(r) } -> std::convertible_to<tl::expected<PipelineBundle, std::string>>;
+	{ f.applyRow(r) } -> std::convertible_to<tl::expected<PipelineBundle, bng_errorobject>>;
 };
 
 
@@ -84,7 +86,7 @@ struct CreateShaderModule {
 		vk::ShaderModule shaderModule = createShaderModule(device, shaderCode);
 		
 		auto rWithShader = boost::hana::insert(r,boost::hana::make_pair(ShaderName, shaderModule));
-		tl::expected<PipelineBundle, std::string> applyResult = f.applyRow(rWithShader);
+		tl::expected<PipelineBundle, bng_errorobject> applyResult = f.applyRow(rWithShader);
 		if (!applyResult.has_value()) {
 			device.destroyShaderModule(shaderModule);
 		}
@@ -145,7 +147,7 @@ struct CreateBasicRenderPass {
 		vk::RenderPass renderPass = device.createRenderPass(renderPassInfo);
 
 		auto rWithRenderPass = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("renderPass"), renderPass));
-		tl::expected<PipelineBundle, std::string> applyResult = f.applyRow(rWithRenderPass);
+		tl::expected<PipelineBundle, bng_errorobject> applyResult = f.applyRow(rWithRenderPass);
 		if (!applyResult.has_value()) {
 			device.destroyRenderPass(renderPass);
 		}
@@ -171,7 +173,7 @@ struct CreateDefaultLayout {
 		vk::PipelineLayout pipelineLayout = device.createPipelineLayout(pipelineLayoutInfo);
 
 		auto rWithLayout = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("layout"), pipelineLayout));
-		tl::expected<PipelineBundle, std::string> result = f.applyRow(rWithLayout);
+		tl::expected<PipelineBundle, bng_errorobject> result = f.applyRow(rWithLayout);
 		if (!result.has_value()) {
 			device.destroyPipelineLayout(pipelineLayout);
 		}
@@ -179,6 +181,40 @@ struct CreateDefaultLayout {
 	}
 };
 
+struct CreateMVPDescriptorLayout {
+	using row_tag = RowType::RowWrapperTag;
+
+	template <typename WrappedReturnType>
+	using return_type_transformer = WrappedReturnType;
+
+	template <typename RowFunction, typename Row>
+	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+
+		auto layoutResult = createDescriptorSetLayout(device);
+		if (!layoutResult.has_value()) {
+			return tl::make_unexpected(layoutResult.error());
+		}
+		vk::DescriptorSetLayout layout = layoutResult.value();
+
+		vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
+			vk::PipelineLayoutCreateFlags(),
+			1, &layout, // SetLayouts
+			0, nullptr // push constants
+		);
+		vk::PipelineLayout pipelineLayout = device.createPipelineLayout(pipelineLayoutInfo);
+
+		auto rWithLayout = boost::hana::insert(
+			boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("layout"), pipelineLayout)),
+			boost::hana::make_pair(BOOST_HANA_STRING("descriptorLayout"), layout)
+		);
+		return f.applyRow(rWithLayout)
+			.or_else([&](bng_errorobject error) {
+				device.destroyDescriptorSetLayout(layout);
+				device.destroyPipelineLayout(pipelineLayout);
+			});
+	}
+};
 struct CreateNullVertexInfo {
 	using row_tag = RowType::RowWrapperTag;
 
@@ -242,7 +278,7 @@ struct CreateSimplePipeline {
 			false,
 			vk::PolygonMode::eFill,
 			vk::CullModeFlagBits::eBack,
-			vk::FrontFace::eClockwise,
+			vk::FrontFace::eCounterClockwise,
 			false, 0, 0, 0,// depth bias
 			1.0, // line width
 			nullptr // pnext
@@ -297,13 +333,13 @@ struct CreateSimplePipeline {
 
 		if (result != vk::Result::eSuccess)
 		{
-			std::string errorMessage;
+			bainangua::bng_errorobject errorMessage;
 			fmt::format_to(std::back_inserter(errorMessage), "Failure creating pipeline: {}", vkResultToString(static_cast<VkResult>(result)));
 			return tl::make_unexpected(errorMessage);
 		}
 
 		auto rWithPipeline = boost::hana::insert(r,boost::hana::make_pair(BOOST_HANA_STRING("pipelines"), graphicsPipelines));
-		tl::expected<PipelineBundle, std::string> applyResult = f.applyRow(rWithPipeline);
+		bng_expected<PipelineBundle> applyResult = f.applyRow(rWithPipeline);
 		if (!applyResult.has_value()) {
 			std::ranges::for_each(graphicsPipelines, [&](vk::Pipeline p) {device.destroyPipeline(p); });
 		}
@@ -313,22 +349,27 @@ struct CreateSimplePipeline {
 
 struct AssemblePipelineBundle {
 	using row_tag = RowType::RowFunctionTag;
-	using return_type = tl::expected<PipelineBundle, std::string>;
+	using return_type = tl::expected<PipelineBundle, bng_errorobject>;
 
 	template<typename Row>
-	constexpr tl::expected<PipelineBundle, std::string> applyRow(Row r) {
+	constexpr bng_expected<PipelineBundle> applyRow(Row r) {
 		std::vector<vk::Pipeline> pipelines = boost::hana::at_key(r, BOOST_HANA_STRING("pipelines"));
 		vk::RenderPass renderPass = boost::hana::at_key(r, BOOST_HANA_STRING("renderPass"));
 		vk::PipelineLayout pipelineLayout = boost::hana::at_key(r, BOOST_HANA_STRING("layout"));
 		vk::ShaderModule vertexShaderModule = boost::hana::at_key(r, BOOST_HANA_STRING("vertexShader"));
 		vk::ShaderModule fragmentShaderModule = boost::hana::at_key(r, BOOST_HANA_STRING("fragmentShader"));
 
-		return PipelineBundle{ pipelines, renderPass, pipelineLayout, vertexShaderModule, fragmentShaderModule };
+		std::optional<vk::DescriptorSetLayout> descriptorSetLayout;
+		if constexpr (boost::hana::contains(r, BOOST_HANA_STRING("descriptorLayout"))) {
+			descriptorSetLayout = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorLayout"));
+		}
+
+		return PipelineBundle{ pipelines, renderPass, pipelineLayout, vertexShaderModule, fragmentShaderModule, descriptorSetLayout };
 	}
 };
 
 export
-tl::expected<PipelineBundle, std::string> createNoVertexPipeline(const PresentationLayer& presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
+bng_expected<PipelineBundle> createNoVertexPipeline(const PresentationLayer& presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
 	vk::Device device = presentation.swapChainDevice_;
 
@@ -349,7 +390,7 @@ tl::expected<PipelineBundle, std::string> createNoVertexPipeline(const Presentat
 }
 
 export
-tl::expected<PipelineBundle, std::string> createVTVertexPipeline(const PresentationLayer& presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
+tl::expected<PipelineBundle, bng_errorobject> createVTVertexPipeline(const PresentationLayer& presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
 	vk::Device device = presentation.swapChainDevice_;
 
@@ -370,16 +411,40 @@ tl::expected<PipelineBundle, std::string> createVTVertexPipeline(const Presentat
 }
 
 export
+tl::expected<PipelineBundle, bng_errorobject> createMVPVertexPipeline(const PresentationLayer& presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
+{
+	vk::Device device = presentation.swapChainDevice_;
+
+	auto pipeRow = boost::hana::make_map(
+		boost::hana::make_pair(BOOST_HANA_STRING("device"), device),
+		boost::hana::make_pair(BOOST_HANA_STRING("presentation"), presentation)
+	);
+	auto pipelineChain =
+		CreateShaderModule<BOOST_HANA_STRING("vertexShader")>(vertexShaderFile)
+		| CreateShaderModule<BOOST_HANA_STRING("fragmentShader")>(fragmentShaderFile)
+		| CreateVTVertexInfo()
+		| CreateBasicRenderPass()
+		| CreateMVPDescriptorLayout()
+		| CreateSimplePipeline()
+		| AssemblePipelineBundle();
+
+	return pipelineChain.applyRow(pipeRow);
+}
+
+export
 void destroyPipeline(const PresentationLayer &presentation, PipelineBundle& pipeline)
 {
 	vk::Device device = presentation.swapChainDevice_;
 
+	std::ranges::for_each(pipeline.graphicsPipelines, [&](vk::Pipeline p) {device.destroyPipeline(p); });
+
 	device.destroyRenderPass(pipeline.renderPass);
 	device.destroyPipelineLayout(pipeline.pipelineLayout);
+	if (pipeline.descriptorLayout.has_value()) {
+		device.destroyDescriptorSetLayout(pipeline.descriptorLayout.value());
+	}
 	device.destroyShaderModule(pipeline.vertexShaderModule);
 	device.destroyShaderModule(pipeline.fragmentShaderModule);
-
-	std::ranges::for_each(pipeline.graphicsPipelines, [&](vk::Pipeline p) {device.destroyPipeline(p); });
 }
 
 }

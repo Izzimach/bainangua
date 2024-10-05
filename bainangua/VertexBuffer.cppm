@@ -1,10 +1,10 @@
 module;
 
 #include "bainangua.hpp"
-#include "blaze/Blaze.h"
+#include "expected.hpp"
 #include "vk_mem_alloc.h"
 
-#include <expected.hpp>
+#include <glm/glm.hpp>
 #include <reflect>
 
 export module VertexBuffer;
@@ -15,8 +15,8 @@ namespace bainangua {
 
 export
 struct VTVertex {
-	blaze::StaticVector<float, 2UL> pos2;
-	blaze::StaticVector<float, 3UL> color;
+	glm::vec2 pos2;
+	glm::vec3 color;
 };
 
 export

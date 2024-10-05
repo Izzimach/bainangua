@@ -5,7 +5,9 @@
 
 #include <vulkan/vulkan.hpp>
 #include "vk_mem_alloc.h"
+#include "vk_result_to_string.h"
 
+#include <fmt/format.h>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -14,6 +16,7 @@
 #include <immer/array.hpp>
 #include <immer/vector.hpp>
 #include <expected.hpp>
+#include <string_view>
 
 namespace bainangua {
 
@@ -31,4 +34,15 @@ namespace bainangua {
 	using bng_vector = immer::vector<T, bainangua_memory_policy>;
 
 	using bng_errorobject = std::pmr::string;
+
+	template <typename V>
+	using bng_expected = tl::expected<V, bng_errorobject>;
+
+	template <typename T>
+	auto formatVkResultError(std::string_view context, vk::Result result) -> bng_expected<T> {
+		bainangua::bng_errorobject errorMessage;
+		fmt::format_to(std::back_inserter(errorMessage), "{}: {}", context, vkResultToString(static_cast<VkResult>(result)));
+		return tl::make_unexpected(errorMessage);
+	}
+
 }
