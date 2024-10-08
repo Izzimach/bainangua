@@ -103,11 +103,11 @@ struct CreateBasicRenderPass {
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
 		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
-		const PresentationLayer &presentation = boost::hana::at_key(r, BOOST_HANA_STRING("presentation"));
+		std::shared_ptr<PresentationLayer> presentation = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 
 		vk::AttachmentDescription colorAttachment(
 			vk::AttachmentDescriptionFlags(),
-			presentation.swapChainFormat_,
+			presentation->swapChainFormat_,
 			vk::SampleCountFlagBits::e1,
 			vk::AttachmentLoadOp::eClear,
 			vk::AttachmentStoreOp::eStore,
@@ -215,6 +215,7 @@ struct CreateMVPDescriptorLayout {
 			});
 	}
 };
+
 struct CreateNullVertexInfo {
 	using row_tag = RowType::RowWrapperTag;
 
@@ -247,6 +248,10 @@ struct CreateVTVertexInfo {
 };
 
 struct CreateSimplePipeline {
+	CreateSimplePipeline(vk::FrontFace cullMode) : cullMode_(cullMode) { }
+
+	vk::FrontFace cullMode_;
+
 	using row_tag = RowType::RowWrapperTag;
 
 	template <typename WrappedReturnType>
@@ -278,7 +283,7 @@ struct CreateSimplePipeline {
 			false,
 			vk::PolygonMode::eFill,
 			vk::CullModeFlagBits::eBack,
-			vk::FrontFace::eCounterClockwise,
+			cullMode_,
 			false, 0, 0, 0,// depth bias
 			1.0, // line width
 			nullptr // pnext
@@ -369,13 +374,13 @@ struct AssemblePipelineBundle {
 };
 
 export
-bng_expected<PipelineBundle> createNoVertexPipeline(const PresentationLayer& presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
+bng_expected<PipelineBundle> createNoVertexPipeline(std::shared_ptr<PresentationLayer> presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
-	vk::Device device = presentation.swapChainDevice_;
+	vk::Device device = presentation->swapChainDevice_;
 
 	auto pipeRow = boost::hana::make_map(
 		boost::hana::make_pair(BOOST_HANA_STRING("device"), device),
-		boost::hana::make_pair(BOOST_HANA_STRING("presentation"), presentation)
+		boost::hana::make_pair(BOOST_HANA_STRING("presenterptr"), presentation)
 	);
 	auto pipelineChain =
 		CreateShaderModule<BOOST_HANA_STRING("vertexShader")>(vertexShaderFile)
@@ -383,20 +388,20 @@ bng_expected<PipelineBundle> createNoVertexPipeline(const PresentationLayer& pre
 		| CreateNullVertexInfo()
 		| CreateBasicRenderPass()
 		| CreateDefaultLayout()
-		| CreateSimplePipeline()
+		| CreateSimplePipeline(vk::FrontFace::eClockwise)
 		| AssemblePipelineBundle();
 
 	return pipelineChain.applyRow(pipeRow);
 }
 
 export
-tl::expected<PipelineBundle, bng_errorobject> createVTVertexPipeline(const PresentationLayer& presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
+tl::expected<PipelineBundle, bng_errorobject> createVTVertexPipeline(std::shared_ptr<PresentationLayer> presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
-	vk::Device device = presentation.swapChainDevice_;
+	vk::Device device = presentation->swapChainDevice_;
 
 	auto pipeRow = boost::hana::make_map(
 		boost::hana::make_pair(BOOST_HANA_STRING("device"), device),
-		boost::hana::make_pair(BOOST_HANA_STRING("presentation"), presentation)
+		boost::hana::make_pair(BOOST_HANA_STRING("presenterptr"), presentation)
 	);
 	auto pipelineChain =
 		CreateShaderModule<BOOST_HANA_STRING("vertexShader")>(vertexShaderFile)
@@ -404,20 +409,20 @@ tl::expected<PipelineBundle, bng_errorobject> createVTVertexPipeline(const Prese
 		| CreateVTVertexInfo()
 		| CreateBasicRenderPass()
 		| CreateDefaultLayout()
-		| CreateSimplePipeline()
+		| CreateSimplePipeline(vk::FrontFace::eClockwise)
 		| AssemblePipelineBundle();
 
 	return pipelineChain.applyRow(pipeRow);
 }
 
 export
-tl::expected<PipelineBundle, bng_errorobject> createMVPVertexPipeline(const PresentationLayer& presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
+tl::expected<PipelineBundle, bng_errorobject> createMVPVertexPipeline(std::shared_ptr<PresentationLayer> presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
-	vk::Device device = presentation.swapChainDevice_;
+	vk::Device device = presentation->swapChainDevice_;
 
 	auto pipeRow = boost::hana::make_map(
 		boost::hana::make_pair(BOOST_HANA_STRING("device"), device),
-		boost::hana::make_pair(BOOST_HANA_STRING("presentation"), presentation)
+		boost::hana::make_pair(BOOST_HANA_STRING("presenterptr"), presentation)
 	);
 	auto pipelineChain =
 		CreateShaderModule<BOOST_HANA_STRING("vertexShader")>(vertexShaderFile)
@@ -425,17 +430,15 @@ tl::expected<PipelineBundle, bng_errorobject> createMVPVertexPipeline(const Pres
 		| CreateVTVertexInfo()
 		| CreateBasicRenderPass()
 		| CreateMVPDescriptorLayout()
-		| CreateSimplePipeline()
+		| CreateSimplePipeline(vk::FrontFace::eCounterClockwise)
 		| AssemblePipelineBundle();
 
 	return pipelineChain.applyRow(pipeRow);
 }
 
 export
-void destroyPipeline(const PresentationLayer &presentation, PipelineBundle& pipeline)
+void destroyPipeline(vk::Device device, PipelineBundle& pipeline)
 {
-	vk::Device device = presentation.swapChainDevice_;
-
 	std::ranges::for_each(pipeline.graphicsPipelines, [&](vk::Pipeline p) {device.destroyPipeline(p); });
 
 	device.destroyRenderPass(pipeline.renderPass);

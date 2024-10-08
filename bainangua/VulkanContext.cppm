@@ -247,9 +247,9 @@ struct StandardDevice {
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("physicalDevice"), vk::PhysicalDevice>, "Row must have field named 'physicalDevice'");
         static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("surface"), vk::SurfaceKHR>, "Row must have field named 'surface'");
 
-        vk::Instance instance = boost::hana::at_key(r, BOOST_HANA_STRING("instance"));
+        vk::Instance instance             = boost::hana::at_key(r, BOOST_HANA_STRING("instance"));
         vk::PhysicalDevice physicalDevice = boost::hana::at_key(r, BOOST_HANA_STRING("physicalDevice"));
-        vk::SurfaceKHR surface = boost::hana::at_key(r, BOOST_HANA_STRING("surface"));
+        vk::SurfaceKHR surface            = boost::hana::at_key(r, BOOST_HANA_STRING("surface"));
 
         // get the QueueFamilyProperties of the first PhysicalDevice
         std::pmr::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties<std::pmr::polymorphic_allocator<vk::QueueFamilyProperties>>();

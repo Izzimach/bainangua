@@ -48,11 +48,11 @@ TEST(PresentationLayer, BasicTest)
 				},
 				.useValidation = false,
 				.innerCode = [](VulkanContext& s) -> bool {
-					PresentationLayer presenter = buildPresentationLayer(s).value();
+					std::shared_ptr<PresentationLayer> presenter = buildPresentationLayer(s);
 
 					s.endOfFrame();
 
-					presenter.teardown();
+					presenter->teardown();
 
 					return true;
 				}
@@ -64,7 +64,7 @@ TEST(PresentationLayer, BasicTest)
 
 TEST(OneFrame, BasicTest)
 {
-	auto recordCommandBuffer = [](vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, const bainangua::PresentationLayer& presenter, const bainangua::PipelineBundle& pipeline)
+	auto recordCommandBuffer = [](vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, std::shared_ptr<bainangua::PresentationLayer> presenter, const bainangua::PipelineBundle& pipeline)
 		{
 			vk::CommandBufferBeginInfo beginInfo({}, {});
 			buffer.begin(beginInfo);
@@ -74,7 +74,7 @@ TEST(OneFrame, BasicTest)
 			vk::RenderPassBeginInfo renderPassInfo(
 				pipeline.renderPass,
 				swapChainImage,
-				vk::Rect2D({ 0,0 }, presenter.swapChainExtent2D_),
+				vk::Rect2D({ 0,0 }, presenter->swapChainExtent2D_),
 				clearColors
 			);
 			buffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
@@ -84,14 +84,14 @@ TEST(OneFrame, BasicTest)
 			vk::Viewport viewport(
 				0.0f,
 				0.0f,
-				static_cast<float>(presenter.swapChainExtent2D_.width),
-				static_cast<float>(presenter.swapChainExtent2D_.height),
+				static_cast<float>(presenter->swapChainExtent2D_.width),
+				static_cast<float>(presenter->swapChainExtent2D_.height),
 				0.0f,
 				1.0f
 			);
 			buffer.setViewport(0, 1, &viewport);
 
-			vk::Rect2D scissor({ 0,0 }, presenter.swapChainExtent2D_);
+			vk::Rect2D scissor({ 0,0 }, presenter->swapChainExtent2D_);
 			buffer.setScissor(0, 1, &scissor);
 
 			buffer.draw(3, 1, 0, 0);
@@ -103,53 +103,52 @@ TEST(OneFrame, BasicTest)
 
 	// renders 10 frames and then stops
 	auto renderLoop = [&recordCommandBuffer](VulkanContext& s) -> bool {
-			PresentationLayer presenter = buildPresentationLayer(s).value();
+			std::shared_ptr<PresentationLayer> presenter = buildPresentationLayer(s);
 
 			std::filesystem::path shader_path = SHADER_DIR;
 			tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createNoVertexPipeline(presenter, (shader_path / "Basic.vert_spv"), (shader_path / "Basic.frag_spv")));
 			if (!pipelineResult.has_value()) {
-				presenter.teardown();
+				presenter->teardown();
 				return false;
 			}
 			bainangua::PipelineBundle pipeline = pipelineResult.value();
 
-			presenter.connectRenderPass(pipeline.renderPass);
+			presenter->connectRenderPass(pipeline.renderPass);
 
 			vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
 
 			bainangua::withCommandPool(s, poolInfo, [&](vk::CommandPool pool) {
-					std::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, bainangua::MultiFrameCount));
+				std::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, bainangua::MultiFrameCount));
 				
-					size_t framesLeft = 10;
+				size_t framesLeft = 10;
 
-					while (!glfwWindowShouldClose(s.glfwWindow) && framesLeft > 0) {
+				while (!glfwWindowShouldClose(s.glfwWindow) && framesLeft > 0) {
 
-						size_t multiFrameIndex = framesLeft % bainangua::MultiFrameCount;
+					size_t multiFrameIndex = framesLeft % bainangua::MultiFrameCount;
 
-						auto result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
-								recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline);
-							});
-						if (result.has_value()) {
-							presenter = result.value();
+					auto result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
+							recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline);
+						});
+					if (result.has_value()) {
+						presenter = result.value();
 
-							glfwPollEvents();
+						glfwPollEvents();
 
-							s.endOfFrame();
+						s.endOfFrame();
 
-							framesLeft--;
-						}
-						else {
-							break;
-						}
+						framesLeft--;
 					}
-
-					s.vkDevice.waitIdle();
+					else {
+						break;
+					}
 				}
-			);
 
-			bainangua::destroyPipeline(presenter, pipeline);
+				s.vkDevice.waitIdle();
+			});
 
-			presenter.teardown();
+			bainangua::destroyPipeline(presenter->swapChainDevice_, pipeline);
+
+			presenter->teardown();
 
 			return true;
 		};
@@ -189,7 +188,7 @@ TEST(OneFrame, BasicTest)
 
 TEST(OneFrame, VertexBuffer)
 {
-	auto recordCommandBuffer = [](vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, const bainangua::PresentationLayer& presenter, const bainangua::PipelineBundle& pipeline, VkBuffer vertexBuffer)
+	auto recordCommandBuffer = [](vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, std::shared_ptr<bainangua::PresentationLayer> presenter, const bainangua::PipelineBundle& pipeline, VkBuffer vertexBuffer)
 		{
 			vk::CommandBufferBeginInfo beginInfo({}, {});
 			buffer.begin(beginInfo);
@@ -199,7 +198,7 @@ TEST(OneFrame, VertexBuffer)
 			vk::RenderPassBeginInfo renderPassInfo(
 				pipeline.renderPass,
 				swapChainImage,
-				vk::Rect2D({ 0,0 }, presenter.swapChainExtent2D_),
+				vk::Rect2D({ 0,0 }, presenter->swapChainExtent2D_),
 				clearColors
 			);
 			buffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
@@ -209,8 +208,8 @@ TEST(OneFrame, VertexBuffer)
 			vk::Viewport viewport(
 				0.0f,
 				0.0f,
-				static_cast<float>(presenter.swapChainExtent2D_.width),
-				static_cast<float>(presenter.swapChainExtent2D_.height),
+				static_cast<float>(presenter->swapChainExtent2D_.width),
+				static_cast<float>(presenter->swapChainExtent2D_.height),
 				0.0f,
 				1.0f
 			);
@@ -220,7 +219,7 @@ TEST(OneFrame, VertexBuffer)
 			vk::DeviceSize offsets[] = { 0 };
 			buffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
-			vk::Rect2D scissor({ 0,0 }, presenter.swapChainExtent2D_);
+			vk::Rect2D scissor({ 0,0 }, presenter->swapChainExtent2D_);
 			buffer.setScissor(0, 1, &scissor);
 
 			buffer.draw(3, 1, 0, 0);
@@ -232,17 +231,17 @@ TEST(OneFrame, VertexBuffer)
 
 	// renders 10 frames and then stops
 	auto renderLoop = [&recordCommandBuffer](VulkanContext& s) -> bool {
-		PresentationLayer presenter = buildPresentationLayer(s).value();
+		std::shared_ptr<PresentationLayer> presenter = buildPresentationLayer(s);
 
 		std::filesystem::path shader_path = SHADER_DIR;
 		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createVTVertexPipeline(presenter, (shader_path / "PosColor.vert_spv"), (shader_path / "PosColor.frag_spv")));
 		if (!pipelineResult.has_value()) {
-			presenter.teardown();
+			presenter->teardown();
 			return false;
 		}
 		bainangua::PipelineBundle pipeline = pipelineResult.value();
 
-		presenter.connectRenderPass(pipeline.renderPass);
+		presenter->connectRenderPass(pipeline.renderPass);
 
 		vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
 
@@ -277,12 +276,11 @@ TEST(OneFrame, VertexBuffer)
 
 			s.vkDevice.waitIdle();
 			bainangua::destroyVertexBuffer(s.vmaAllocator, vertexBuffer, bufferMemory);
-		}
-		);
+		});
 
-		bainangua::destroyPipeline(presenter, pipeline);
+		bainangua::destroyPipeline(presenter->swapChainDevice_, pipeline);
 
-		presenter.teardown();
+		presenter->teardown();
 
 		return true;
 		};
@@ -321,7 +319,7 @@ TEST(OneFrame, VertexBuffer)
 
 TEST(OneFrame, IndexBuffer)
 {
-	auto recordCommandBuffer = [](vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, const bainangua::PresentationLayer& presenter, const bainangua::PipelineBundle& pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer) {
+	auto recordCommandBuffer = [](vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, std::shared_ptr<bainangua::PresentationLayer> presenter, const bainangua::PipelineBundle& pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer) {
 		vk::CommandBufferBeginInfo beginInfo({}, {});
 		buffer.begin(beginInfo);
 
@@ -330,7 +328,7 @@ TEST(OneFrame, IndexBuffer)
 		vk::RenderPassBeginInfo renderPassInfo(
 			pipeline.renderPass,
 			swapChainImage,
-			vk::Rect2D({ 0,0 }, presenter.swapChainExtent2D_),
+			vk::Rect2D({ 0,0 }, presenter->swapChainExtent2D_),
 			clearColors
 		);
 		buffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
@@ -340,14 +338,14 @@ TEST(OneFrame, IndexBuffer)
 		vk::Viewport viewport(
 			0.0f,
 			0.0f,
-			static_cast<float>(presenter.swapChainExtent2D_.width),
-			static_cast<float>(presenter.swapChainExtent2D_.height),
+			static_cast<float>(presenter->swapChainExtent2D_.width),
+			static_cast<float>(presenter->swapChainExtent2D_.height),
 			0.0f,
 			1.0f
 		);
 		buffer.setViewport(0, 1, &viewport);
 
-		vk::Rect2D scissor({ 0,0 }, presenter.swapChainExtent2D_);
+		vk::Rect2D scissor({ 0,0 }, presenter->swapChainExtent2D_);
 		buffer.setScissor(0, 1, &scissor);
 
 		vk::Buffer vertexBuffers[] = { vertexBuffer };
@@ -364,17 +362,17 @@ TEST(OneFrame, IndexBuffer)
 		};
 
 	auto renderLoop = [=](bainangua::VulkanContext& s) -> bool {
-		bainangua::PresentationLayer presenter = buildPresentationLayer(s).value();
+		std::shared_ptr<bainangua::PresentationLayer> presenter = buildPresentationLayer(s);
 
 		std::filesystem::path shader_path = SHADER_DIR; // defined via CMake in white_pumpkin.hpp
 		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createVTVertexPipeline(presenter, (shader_path / "PosColor.vert_spv"), (shader_path / "PosColor.frag_spv")));
 		if (!pipelineResult.has_value()) {
-			presenter.teardown();
+			presenter->teardown();
 			return false;
 		}
 		bainangua::PipelineBundle pipeline = pipelineResult.value();
 
-		presenter.connectRenderPass(pipeline.renderPass);
+		presenter->connectRenderPass(pipeline.renderPass);
 
 		vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
 
@@ -392,7 +390,7 @@ TEST(OneFrame, IndexBuffer)
 
 			while (!glfwWindowShouldClose(s.glfwWindow) && framesLeft > 0) {
 
-				tl::expected<bainangua::PresentationLayer, vk::Result> result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
+				tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result> result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
 						recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline, vertexBuffer, indexBuffer);
 					});
 				if (result.has_value()) {
@@ -417,9 +415,9 @@ TEST(OneFrame, IndexBuffer)
 			bainangua::destroyVertexBuffer(s.vmaAllocator, indexBuffer, indexBufferMemory);
 		});
 
-		bainangua::destroyPipeline(presenter, pipeline);
+		bainangua::destroyPipeline(presenter->swapChainDevice_, pipeline);
 
-		presenter.teardown();
+		presenter->teardown();
 
 		return true;
 	};

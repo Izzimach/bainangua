@@ -14,51 +14,49 @@ import Pipeline;
 namespace bainangua {
 
 export
-tl::expected<PresentationLayer,vk::Result> drawOneFrame(VulkanContext& s, PresentationLayer presenter, const PipelineBundle& pipeline, vk::CommandBuffer buffer, size_t multiFrameIndex, std::function<void(vk::CommandBuffer, vk::Framebuffer)> drawCommands)
+tl::expected<std::shared_ptr<PresentationLayer>,vk::Result> drawOneFrame(VulkanContext& s, std::shared_ptr<PresentationLayer> presenterptr, const PipelineBundle& pipeline, vk::CommandBuffer buffer, size_t multiFrameIndex, std::function<void(vk::CommandBuffer, vk::Framebuffer)> drawCommands)
 {
 	uint32_t retryLimit = 100;
 
 	// This is called from two different places.
 	auto rebuildPresenter = [&]() {
-			presenter = presenter.rebuildSwapChain(s).value();
-			presenter.connectRenderPass(pipeline.renderPass);
+			presenterptr = presenterptr->rebuildSwapChain(s);
+			presenterptr->connectRenderPass(pipeline.renderPass);
 		};
 
 	while (retryLimit > 0) {
 		retryLimit--;
 
-		vk::Result waitResult = s.vkDevice.waitForFences(presenter.inFlightFences_[multiFrameIndex], vk::True, UINT64_MAX);
+		vk::Result waitResult = s.vkDevice.waitForFences(presenterptr->inFlightFences_[multiFrameIndex], vk::True, UINT64_MAX);
 		if (waitResult != vk::Result::eSuccess)
 		{
-			presenter.teardown();
 			return tl::make_unexpected(waitResult);
 		}
 
 		// we don't use the "enhanced" version of acquireNextImageKHR since it throws on an OutOfDateKHR result
 		uint32_t imageIndex = 0;
-		vk::Result acquireResult = s.vkDevice.acquireNextImageKHR(presenter.swapChain_, UINT64_MAX, presenter.imageAvailableSemaphores_[multiFrameIndex], VK_NULL_HANDLE, &imageIndex);
+		vk::Result acquireResult = s.vkDevice.acquireNextImageKHR(presenterptr->swapChain_, UINT64_MAX, presenterptr->imageAvailableSemaphores_[multiFrameIndex], VK_NULL_HANDLE, &imageIndex);
 		if (acquireResult == vk::Result::eErrorOutOfDateKHR || acquireResult == vk::Result::eSuboptimalKHR || s.windowResized) {
 			s.windowResized = false;
 			rebuildPresenter();
 			continue; // retry and rebuild swapchain
 		}
 		else if (acquireResult != vk::Result::eSuccess) {
-			presenter.teardown();
 			return tl::make_unexpected(acquireResult);
 		}
 
-		s.vkDevice.resetFences(presenter.inFlightFences_[multiFrameIndex]);
+		s.vkDevice.resetFences(presenterptr->inFlightFences_[multiFrameIndex]);
 
 		buffer.reset();
-		drawCommands(buffer, presenter.swapChainFramebuffers_[imageIndex]);
+		drawCommands(buffer, presenterptr->swapChainFramebuffers_[imageIndex]);
 
 		vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
-		vk::SubmitInfo submitInfo(presenter.imageAvailableSemaphores_[multiFrameIndex], waitStages, buffer, presenter.renderFinishedSemaphores_[multiFrameIndex]);
-		s.graphicsQueue.submit(submitInfo, presenter.inFlightFences_[multiFrameIndex]);
+		vk::SubmitInfo submitInfo(presenterptr->imageAvailableSemaphores_[multiFrameIndex], waitStages, buffer, presenterptr->renderFinishedSemaphores_[multiFrameIndex]);
+		s.graphicsQueue.submit(submitInfo, presenterptr->inFlightFences_[multiFrameIndex]);
 
 		vk::PresentInfoKHR presentInfo(
-			presenter.renderFinishedSemaphores_[multiFrameIndex],
-			presenter.swapChain_,
+			presenterptr->renderFinishedSemaphores_[multiFrameIndex],
+			presenterptr->swapChain_,
 			imageIndex,
 			nullptr
 		);
@@ -78,7 +76,7 @@ tl::expected<PresentationLayer,vk::Result> drawOneFrame(VulkanContext& s, Presen
 		return tl::make_unexpected(vk::Result::eErrorUnknown);
 	}
 
-	return presenter;
+	return presenterptr;
 }
 
 }

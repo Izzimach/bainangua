@@ -7,6 +7,7 @@
 module;
 
 #include "bainangua.hpp"
+#include "RowType.hpp"
 
 #include <immer/array.hpp>
 #include <optional>
@@ -96,7 +97,7 @@ export struct PresentationLayer
 
 	void connectRenderPass(const vk::RenderPass& renderPass);
 
-	std::optional<PresentationLayer> rebuildSwapChain(VulkanContext& s);
+	std::shared_ptr<PresentationLayer> rebuildSwapChain(const VulkanContext& s);
 
 	vk::Device swapChainDevice_;
 	vk::SwapchainKHR swapChain_;
@@ -115,7 +116,7 @@ export struct PresentationLayer
 };
 
 
-export std::optional<PresentationLayer> buildPresentationLayer(VulkanContext& boilerplate)
+export std::shared_ptr<PresentationLayer> buildPresentationLayer(const VulkanContext& boilerplate)
 {
 	SwapChainProperties swapChainInfo = querySwapChainProperties(boilerplate);
 	auto useableFormat = std::find_if(swapChainInfo.formats.begin(), swapChainInfo.formats.end(), [](vk::SurfaceFormatKHR s) { return s.format == vk::Format::eB8G8R8A8Srgb && s.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear; });
@@ -154,10 +155,10 @@ export std::optional<PresentationLayer> buildPresentationLayer(VulkanContext& bo
 	uint32_t imageCount;
 	VkResult imagesKHRResult;
 	imagesKHRResult = vkGetSwapchainImagesKHR(swapChainVkDevice, static_cast<VkSwapchainKHR>(swapChain), &imageCount, nullptr);
-	if (imagesKHRResult != VK_SUCCESS) { return std::optional<PresentationLayer>(); }
+	if (imagesKHRResult != VK_SUCCESS) { return std::shared_ptr<PresentationLayer>(); }
 	std::vector<VkImage> swapChainImagesRaw(imageCount);
 	imagesKHRResult = vkGetSwapchainImagesKHR(swapChainVkDevice, static_cast<VkSwapchainKHR>(swapChain), &imageCount, swapChainImagesRaw.data());
-	if (imagesKHRResult != VK_SUCCESS) { return std::optional<PresentationLayer>(); }
+	if (imagesKHRResult != VK_SUCCESS) { return std::shared_ptr<PresentationLayer>(); }
 
 	// convert the from VkImage to vk::Image
 	immer::array<vk::Image, bainangua_memory_policy> swapChainImages = std::accumulate(
@@ -188,7 +189,7 @@ export std::optional<PresentationLayer> buildPresentationLayer(VulkanContext& bo
 		inFlightFences = inFlightFences.push_back(swapChainDevice.createFence(fenceInfo));
 	}
 	
-	return PresentationLayer(
+	return std::make_shared<PresentationLayer>(
 		swapChainDevice,
 		swapChain,
 
@@ -230,7 +231,7 @@ void PresentationLayer::teardownFramebuffers()
 	swapChainFramebuffers_ = bng_array<vk::Framebuffer>();
 }
 
-std::optional<PresentationLayer> PresentationLayer::rebuildSwapChain(VulkanContext &s)
+std::shared_ptr<PresentationLayer> PresentationLayer::rebuildSwapChain(const VulkanContext &s)
 {
 	s.vkDevice.waitIdle();
 
@@ -261,5 +262,27 @@ void PresentationLayer::teardown()
 		swapChainDevice_.destroySwapchainKHR(swapChain_);
 	}
 }
+
+
+export struct PresentationLayerStage {
+	using row_tag = RowType::RowWrapperTag;
+
+	template <typename WrappedReturnType>
+	using return_type_transformer = WrappedReturnType;
+
+	template <typename RowFunction, typename Row>
+	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+		static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("context"), VulkanContext>, "Row must have field named 'context'");
+
+		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+
+		std::shared_ptr<PresentationLayer> presenterptr(buildPresentationLayer(context));
+
+		auto rWithPresenter = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("presenterptr"), presenterptr));
+		auto result = f.applyRow(rWithPresenter);
+		presenterptr->teardown();
+		return result;
+	}
+};
 
 }
