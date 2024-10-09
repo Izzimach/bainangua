@@ -38,6 +38,11 @@ namespace bainangua {
 	template <typename V>
 	using bng_expected = tl::expected<V, bng_errorobject>;
 
+	template <typename V>
+	auto bng_unexpected(bng_errorobject x) -> tl::expected<V, bng_errorobject> {
+		return tl::make_unexpected(x);
+	}
+
 	template <typename T>
 	auto formatVkResultError(std::string_view context, vk::Result result) -> bng_expected<T> {
 		bainangua::bng_errorobject errorMessage;

@@ -450,4 +450,35 @@ void destroyPipeline(vk::Device device, PipelineBundle& pipeline)
 	device.destroyShaderModule(pipeline.fragmentShaderModule);
 }
 
+export struct MVPPipelineStage {
+	MVPPipelineStage(std::filesystem::path shaderPath) : shaderPath_(shaderPath) {}
+
+	std::filesystem::path shaderPath_;//
+
+	using row_tag = RowType::RowWrapperTag;
+
+	template <typename WrappedReturnType>
+	using return_type_transformer = WrappedReturnType;
+
+	template <typename RowFunction, typename Row>
+	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
+
+		tl::expected<bainangua::PipelineBundle, std::pmr::string> pipelineResult(bainangua::createMVPVertexPipeline(presenterptr, (shaderPath_ / "PosColorMVP.vert_spv"), (shaderPath_ / "PosColor.frag_spv")));
+		if (!pipelineResult.has_value()) {
+			return tl::make_unexpected(pipelineResult.error());
+		}
+		bainangua::PipelineBundle pipeline = pipelineResult.value();
+
+		presenterptr->connectRenderPass(pipeline.renderPass);
+
+		auto rWithPipeline = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("pipelineBundle"), pipeline));
+		auto result = f.applyRow(rWithPipeline);
+
+		destroyPipeline(context.vkDevice, pipeline);
+		return result;
+	}
+};
+
 }

@@ -16,8 +16,8 @@ Value Semantics
 
 Functional Programming
 - Use Haskell-style "bracket" functions although under the hood it's probably still RAII :stuck_out_tongue_winking_eye:
-- Use (abuse?) the pipe operator | to compose multiple small functions.
-- Use row types to allow more freedom of function composition order.
+- Use (abuse?) the pipe operator | to compose multiple small functions using expression templates.
+- Use row polymorphic types to allow more freedom and flexibility in function composition order.
 
 ---------
 

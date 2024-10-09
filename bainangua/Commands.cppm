@@ -1,6 +1,7 @@
 module;
 
 #include "bainangua.hpp"
+#include "RowType.hpp"
 
 #include <functional>
 
@@ -58,5 +59,52 @@ export void withCommandBuffer(const VulkanContext& s, vk::CommandPool pool, std:
 	}
 	s.vkDevice.freeCommandBuffers(pool, buffers);
 }
+
+
+export struct SimpleGraphicsCommandPoolStage {
+	using row_tag = RowType::RowWrapperTag;
+
+	template <typename WrappedReturnType>
+	using return_type_transformer = WrappedReturnType;
+
+	template <typename RowFunction, typename Row>
+	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+
+		vk::CommandPool pool = context.vkDevice.createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, context.graphicsQueueFamilyIndex));
+
+		auto rWithPool = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("commandPool"), pool));
+		auto result = f.applyRow(rWithPool);
+
+		context.vkDevice.destroyCommandPool(pool);
+
+		return result;
+	}
+};
+
+export struct PrimaryGraphicsCommandBuffersStage {
+	PrimaryGraphicsCommandBuffersStage(uint32_t count) : count_(count) {}
+		
+	uint32_t count_;
+
+	using row_tag = RowType::RowWrapperTag;
+
+	template <typename WrappedReturnType>
+	using return_type_transformer = WrappedReturnType;
+
+	template <typename RowFunction, typename Row>
+	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::CommandPool commandPool = boost::hana::at_key(r, BOOST_HANA_STRING("commandPool"));
+
+		std::pmr::vector<vk::CommandBuffer> commandBuffers = context.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(commandPool, vk::CommandBufferLevel::ePrimary, count_));
+
+		auto rWithBuffers = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("commandBuffers"), commandBuffers));
+		auto result = f.applyRow(rWithBuffers);
+
+		// don't need to destroy command buffers
+		return result;
+	}
+};
 
 }

@@ -137,4 +137,37 @@ export auto linkUBOAndDescriptors(const VulkanContext& s, std::pmr::vector<Unifo
 	return tl::expected<void, bng_errorobject>();
 }
 
+export struct CreateAndLinkUniformBuffersStage {
+	using row_tag = RowType::RowWrapperTag;
+
+	template <typename WrappedReturnType>
+	using return_type_transformer = WrappedReturnType;
+
+	template <typename RowFunction, typename Row>
+	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		std::pmr::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
+
+		auto createResult = createUniformBuffers(context.vmaAllocator);
+		if (!createResult) {
+			return tl::make_unexpected(createResult.error());
+		}
+
+		std::pmr::vector<UniformBufferBundle> ubos = createResult.value();
+		auto linkResult = linkUBOAndDescriptors(context, ubos, descriptorSets);
+		if (!linkResult) {
+			destroyUniformBuffers(context.vmaAllocator, ubos);
+			return tl::make_unexpected(linkResult.error());
+		}
+
+		auto rWithUBOs = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("uniformBuffers"), ubos));
+		auto result = f.applyRow(rWithUBOs);
+
+		destroyUniformBuffers(context.vmaAllocator, ubos);
+
+		return result;
+
+	}
+};
+
 }
