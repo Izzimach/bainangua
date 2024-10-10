@@ -24,10 +24,12 @@ module;
 #include <chrono>
 #include <coroutine>
 #include <expected.hpp> // note: tl::expected for c++<23
-#include <fmt/format.h>
+#include <format>
 #include <functional>
+#include <iostream>
 #include <memory_resource>
 #include <ranges>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -97,7 +99,7 @@ ReturnObject doNothingEndFrame()
 {
     for (unsigned i = 0;; ++i) {
         co_await std::suspend_always();
-        fmt::print("counter: {}\n", i);
+        std::cout << std::format("counter: {}\n", i);
     }
 }
 
@@ -108,7 +110,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* /*pUserData*/) {
 
-    fmt::print("Validation message: [{}]\n", pCallbackData->pMessage);
+    std::cout << std::format("Validation message: [{}]\n", pCallbackData->pMessage);
 
     return VK_FALSE;
 }
@@ -154,23 +156,23 @@ tl::expected<int, std::string> invokeInnerCode(Row r)
 
         bool result = config.innerCode(vkState);
         if (!result) {
-            fmt::print("inner code returned false\n");
+            std::cout << std::format("inner code returned false\n");
         }
         glfwSetWindowUserPointer(window, nullptr);
     }
     catch (vk::SystemError& err)
     {
-        fmt::print("vk::SystemError: {}\n", err.what());
+        std::cout << std::format("vk::SystemError: {}\n", err.what());
         return tl::make_unexpected(err.what());
     }
     catch (std::exception& err)
     {
-        fmt::print("std::exception: {}\n", err.what());
+        std::cout << std::format("std::exception: {}\n", err.what());
         return tl::make_unexpected(err.what());
     }
     catch (...)
     {
-        fmt::print("unknown error!\n");
+        std::cout << std::format("unknown error!\n");
         return tl::make_unexpected("unknown error!");
     }
 
@@ -260,7 +262,7 @@ struct StandardDevice {
         uint32_t graphicsQueueFamilyIndex = static_cast<uint32_t>(std::distance(queueFamilyProperties.begin(), graphicsQueueIterator));
         assert(graphicsQueueFamilyIndex < queueFamilyProperties.size());
 
-        fmt::print("Graphics Queue family index={}\n", graphicsQueueFamilyIndex);
+        std::cout << std::format("Graphics Queue family index={}\n", graphicsQueueFamilyIndex);
 
         // find a queue to support presentation
         std::optional<uint32_t> presentQueueFamilyIndex;
@@ -345,7 +347,7 @@ struct CreateGLFWWindowAndSurface {
         if (err != VK_SUCCESS)
         {
             std::string s;
-            fmt::format_to(std::back_inserter(s), "Error from glfwCreateWindowSurface: {}\n", +err);
+            std::format_to(std::back_inserter(s), "Error from glfwCreateWindowSurface: {}\n", +err);
             return tl::make_unexpected(s);
         }
 
@@ -381,10 +383,10 @@ struct FirstSwapchainPhysicalDevice {
         auto deviceSupportsSwapchain = [](vk::PhysicalDevice device) {
             // check device extensions
             std::pmr::vector<vk::ExtensionProperties> deviceProperties = device.enumerateDeviceExtensionProperties<std::pmr::polymorphic_allocator<vk::ExtensionProperties>>();
-            fmt::print("{} device properties supported\n", deviceProperties.size());
+            std::cout << std::format("{} device properties supported\n", deviceProperties.size());
             for (auto& prop : deviceProperties)
             {
-                fmt::print("property: {}\n", prop.extensionName.operator std::string());
+                std::cout << std::format("property: {}\n", prop.extensionName.operator std::string());
             }
             bool supportsSwapchain =
                 (std::ranges::find_if(deviceProperties,
@@ -392,7 +394,7 @@ struct FirstSwapchainPhysicalDevice {
                         std::string e = p.extensionName;
                         return e == std::string(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
                     }) != deviceProperties.end());
-            fmt::print("device supports swapchain = {}\n", supportsSwapchain);
+            std::cout << std::format("device supports swapchain = {}\n", supportsSwapchain);
             return supportsSwapchain;
             };
 
@@ -430,16 +432,16 @@ struct StandardVulkanInstance {
         std::pmr::vector<const char*> rawExtensionStrings;
         std::ranges::for_each(totalExtensions.begin(), totalExtensions.end(), [&](const std::string& s) { rawExtensionStrings.push_back(s.c_str()); });
 
-        fmt::print("total required extensions:\n");
+        std::cout << std::format("total required extensions:\n");
         for (uint32_t ix = 0; ix < rawExtensionStrings.size(); ix++) {
-            fmt::print(" required: {}\n", rawExtensionStrings[ix]);
+            std::cout << std::format(" required: {}\n", rawExtensionStrings[ix]);
         }
 
         // dump list of available extensions
         std::pmr::vector<vk::ExtensionProperties> vulkanExtensions = vk::enumerateInstanceExtensionProperties<std::pmr::polymorphic_allocator<vk::ExtensionProperties>>(nullptr);
-        fmt::print("{} extensions supported\n", vulkanExtensions.size());
+        std::cout << std::format("{} extensions supported\n", vulkanExtensions.size());
         for (auto& prop : vulkanExtensions) {
-            fmt::print("supported: {}\n", prop.extensionName.operator std::string());
+            std::cout << std::format("supported: {}\n", prop.extensionName.operator std::string());
         }
 
         // check validation layers
@@ -520,9 +522,9 @@ struct GLFWOuterWrapper {
                 }
             });
 
-        fmt::print("{} extensions required by glfw\n", glfwExtensionCount);
+        std::cout << std::format("{} extensions required by glfw\n", glfwExtensionCount);
         for (uint32_t ix = 0; ix < glfwExtensionCount; ix++) {
-            fmt::print(" required: {}\n", glfwExtensions[ix]);
+            std::cout << std::format(" required: {}\n", glfwExtensions[ix]);
         }
 
         // create a new config with the updated extensions, then add it to the row

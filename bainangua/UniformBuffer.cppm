@@ -10,7 +10,6 @@ module;
 #include "vk_result_to_string.h"
 
 #include <chrono>
-#include <fmt/format.h>
 
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
@@ -42,7 +41,7 @@ auto createDescriptorSetLayout(vk::Device device) -> bng_expected<vk::Descriptor
 	}
 	else {
 		std::pmr::string errorMessage;
-		fmt::format_to(std::back_inserter(errorMessage), "createDescriptorSetLayout: could not create descriptor set layout, error={}", vkResultToString((static_cast<VkResult>(createResult))));
+		std::format_to(std::back_inserter(errorMessage), "createDescriptorSetLayout: could not create descriptor set layout, error={}", vkResultToString((static_cast<VkResult>(createResult))));
 		return tl::make_unexpected(errorMessage);
 	}
 }

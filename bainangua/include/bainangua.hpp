@@ -7,7 +7,7 @@
 #include "vk_mem_alloc.h"
 #include "vk_result_to_string.h"
 
-#include <fmt/format.h>
+#include <format>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -46,7 +46,7 @@ namespace bainangua {
 	template <typename T>
 	auto formatVkResultError(std::string_view context, vk::Result result) -> bng_expected<T> {
 		bainangua::bng_errorobject errorMessage;
-		fmt::format_to(std::back_inserter(errorMessage), "{}: {}", context, vkResultToString(static_cast<VkResult>(result)));
+		std::format_to(std::back_inserter(errorMessage), "{}: {}", context, vkResultToString(static_cast<VkResult>(result)));
 		return tl::make_unexpected(errorMessage);
 	}
 

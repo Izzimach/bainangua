@@ -2,15 +2,20 @@
 // 白南瓜 test application main entry point
 
 #include "bainangua.hpp"
-#include "expected.hpp" // note: tl::expected for c++<23
+#include "expected.hpp" // using tl::expected since this is C++20
 #include "RowType.hpp"
 #include "tanuki.hpp"
 #include "white_pumpkin.hpp"
 
+#ifdef NDEBUG
+#include <windows.h>
+#endif
+
 #include <algorithm>
 #include <concepts>
 #include <filesystem>
-#include <fmt/format.h>
+#include <format>
+#include <iostream>
 #include <memory_resource>
 #include <vector>
 
@@ -121,8 +126,11 @@ struct InvokeRenderLoop {
 
 
 
-
+#ifdef NDEBUG
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
+#else
 int main()
+#endif
 {
 	// setup a pool arena for memory allocation.
 	// Many of the vulkan-hpp calls use the default allocator so we have to call set_default_resource here.
@@ -170,7 +178,7 @@ int main()
 		return programResult.value();
 	}
 	else {
-		fmt::print("program error: {}\n", programResult.error());
+		std::cout << std::format("program error: {}\n", programResult.error());
 		return -1;
 	}
 }

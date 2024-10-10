@@ -339,7 +339,7 @@ struct CreateSimplePipeline {
 		if (result != vk::Result::eSuccess)
 		{
 			bainangua::bng_errorobject errorMessage;
-			fmt::format_to(std::back_inserter(errorMessage), "Failure creating pipeline: {}", vkResultToString(static_cast<VkResult>(result)));
+			std::format_to(std::back_inserter(errorMessage), "Failure creating pipeline: {}", vkResultToString(static_cast<VkResult>(result)));
 			return tl::make_unexpected(errorMessage);
 		}
 

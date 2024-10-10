@@ -1,7 +1,6 @@
 ﻿# CMakeList.txt : CMake project for GLFW_X, include source and define
 # project specific logic here.
 
-find_package(fmt REQUIRED)
 find_package(immer REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(Vulkan REQUIRED)
@@ -9,7 +8,6 @@ find_package(VulkanMemoryAllocator REQUIRED)
 find_package(GTest REQUIRED)
 find_package(Boost REQUIRED COMPONENTS hana)
 find_package(boost_asio REQUIRED)
-#find_package(blaze REQUIRED)
 find_package(glm REQUIRED)
 
 include(FetchContent)
@@ -52,7 +50,6 @@ endif()
 target_link_libraries(bainangua PUBLIC glfw)
 target_link_libraries(bainangua PUBLIC immer)
 target_link_libraries(bainangua PUBLIC Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator)
-target_link_libraries(bainangua PUBLIC fmt::fmt)
 target_link_libraries(bainangua INTERFACE Boost::hana Boost::asio)
 #target_link_libraries(bainangua INTERFACE blaze::blaze)
 
@@ -68,7 +65,6 @@ target_include_directories(experimental_lib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR
 target_link_libraries(experimental_lib PUBLIC glfw)
 target_link_libraries(experimental_lib PUBLIC immer)
 target_link_libraries(experimental_lib PUBLIC Vulkan::Vulkan)
-target_link_libraries(experimental_lib PUBLIC fmt::fmt)
 target_link_libraries(experimental_lib INTERFACE Boost::hana Boost::asio)
 
 #
@@ -103,17 +99,22 @@ endforeach (FILE)
 add_executable (white_pumpkin "white_pumpkin.cpp")
 target_compile_features(white_pumpkin PUBLIC cxx_std_20)
 
-set(ASSETS_DIR ${ASSETS_BINARY_DIR})
-cmake_path(RELATIVE_PATH ASSETS_DIR
-           BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+# No console window for non-debug builds on Windows
+# from https://stackoverflow.com/questions/2752792/whats-the-equivalent-of-gccs-mwindows-option-in-cmake
+#
+set_target_properties(white_pumpkin PROPERTIES WIN32_EXECUTABLE
+  $<AND:$<PLATFORM_ID:Windows>,$<NOT:$<CONFIG:Debug,RelWithDebInfo>>>
+)
 
+# figure out the ASSET_DIR and put it into the white_pumpkin.hpp file for use by C++ code
+set(ASSETS_DIR ${ASSETS_BINARY_DIR})
+cmake_path(RELATIVE_PATH ASSETS_DIR BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 configure_file(white_pumpkin.hpp.in white_pumpkin.hpp)
 
 target_include_directories(white_pumpkin PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}   # the generated white_pumpkin.hpp gets put in the BUILD directory, so this makes sure we can find it
     )
-
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     target_compile_options(bainangua PRIVATE /W4)
