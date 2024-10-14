@@ -133,9 +133,11 @@ namespace RowType {
 		using return_type_transformer = RowWrapper1::template return_type_transformer<RowWrapper2::template return_type_transformer<WrappedReturnType>>;
 
 		template <typename RowFunction, typename Row>
-		constexpr return_type_transformer<typename RowFunction::return_type> wrapRowFunction(RowFunction f, Row r) { return w1_.wrapRowFunction(ComposedRowFunction<RowWrapper2, RowFunction>(w2_, f), r); }
+		constexpr return_type_transformer<typename RowFunction::return_type> wrapRowFunction(RowFunction f, Row r) {
+			return w1_.wrapRowFunction(ComposedRowFunction<RowWrapper2, RowFunction>(w2_, f), r);
+		}
 	};
-
+	
 	struct ZeroRowFunction {
 		using row_tag = RowFunctionTag;
 		using return_type = double;
@@ -162,7 +164,9 @@ namespace RowType {
 		using return_type_transformer = WrappedReturnType;
 
 		template <typename RowFunction, typename Row>
-		constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) { return f.applyRow(r); }
+		constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+			return f.applyRow(r);
+		}
 	};
 
 	struct OnlyReturnStringWrapper {
@@ -207,6 +211,7 @@ namespace RowType {
 template <typename RowWrapper, typename RowFunction>
 	requires RowType::isRowWrapper<RowWrapper, RowFunction>
 constexpr auto operator | (RowWrapper w, RowFunction f) { return RowType::ComposedRowFunction<RowWrapper, RowFunction>(w,f); };
+
 
 template <typename RowWrapper1, typename RowWrapper2>
 	requires RowType::isRowWrapperCompose<RowWrapper1, RowWrapper2>

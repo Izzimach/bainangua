@@ -3,8 +3,10 @@
 #include "bainangua.hpp"
 #include "gtest/gtest.h"
 #include "nangua_tests.hpp"
+#include "RowType.hpp"
 
 #include <expected.hpp>
+#include <filesystem>
 
 import OneFrame;
 import VulkanContext;
@@ -17,336 +19,96 @@ using namespace bainangua;
 
 namespace {
 
-TEST(VulkanContext, BasicTest)
-{
-	EXPECT_NO_THROW(
-		createVulkanContext(
-			VulkanContextConfig{
-				.AppName = "Boilerplate Test App",
-				.requiredExtensions = {
-						VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-				},
-				.useValidation = false,
-				.innerCode = [](auto s) { return false; }
-			}
-		)
-	);
-}
+std::filesystem::path ShaderPath = SHADER_DIR;
 
-TEST(PresentationLayer, BasicTest)
-{
-	EXPECT_NO_THROW(
-		createVulkanContext(
-			VulkanContextConfig{
-				.AppName = "PresentationLayer Test App",
-				.requiredExtensions = {
-						VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-				},
-				.useValidation = false,
-				.innerCode = [](VulkanContext& s) -> bool {
-					std::shared_ptr<PresentationLayer> presenter = buildPresentationLayer(s);
+struct NoRenderLoop {
+	using row_tag = RowType::RowFunctionTag;
+	using return_type = tl::expected<int, std::pmr::string>;
 
-					s.endOfFrame();
+	template<typename Row>
+	constexpr tl::expected<int, std::pmr::string> applyRow(Row r) {
+		VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		s.endOfFrame();
+		return 0;
+	}
+};
 
-					presenter->teardown();
-
-					return true;
-				}
-			}
-		)
-	);
-
-}
-
-TEST(OneFrame, BasicTest)
-{
-	auto recordCommandBuffer = [](vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, std::shared_ptr<bainangua::PresentationLayer> presenter, const bainangua::PipelineBundle& pipeline)
-		{
-			vk::CommandBufferBeginInfo beginInfo({}, {});
-			buffer.begin(beginInfo);
-
-			std::array<vk::ClearValue, 1> clearColors{ vk::ClearValue() };
-
-			vk::RenderPassBeginInfo renderPassInfo(
-				pipeline.renderPass,
-				swapChainImage,
-				vk::Rect2D({ 0,0 }, presenter->swapChainExtent2D_),
-				clearColors
-			);
-			buffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-
-			buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.graphicsPipelines[0]);
-
-			vk::Viewport viewport(
-				0.0f,
-				0.0f,
-				static_cast<float>(presenter->swapChainExtent2D_.width),
-				static_cast<float>(presenter->swapChainExtent2D_.height),
-				0.0f,
-				1.0f
-			);
-			buffer.setViewport(0, 1, &viewport);
-
-			vk::Rect2D scissor({ 0,0 }, presenter->swapChainExtent2D_);
-			buffer.setScissor(0, 1, &scissor);
-
-			buffer.draw(3, 1, 0, 0);
-
-			buffer.endRenderPass();
-
-			buffer.end();
-		};
-
-	// renders 10 frames and then stops
-	auto renderLoop = [&recordCommandBuffer](VulkanContext& s) -> bool {
-			std::shared_ptr<PresentationLayer> presenter = buildPresentationLayer(s);
-
-			std::filesystem::path shader_path = SHADER_DIR;
-			tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createNoVertexPipeline(presenter, (shader_path / "Basic.vert_spv"), (shader_path / "Basic.frag_spv")));
-			if (!pipelineResult.has_value()) {
-				presenter->teardown();
-				return false;
-			}
-			bainangua::PipelineBundle pipeline = pipelineResult.value();
-
-			presenter->connectRenderPass(pipeline.renderPass);
-
-			vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
-
-			bainangua::withCommandPool(s, poolInfo, [&](vk::CommandPool pool) {
-				std::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, bainangua::MultiFrameCount));
-				
-				size_t framesLeft = 10;
-
-				while (!glfwWindowShouldClose(s.glfwWindow) && framesLeft > 0) {
-
-					size_t multiFrameIndex = framesLeft % bainangua::MultiFrameCount;
-
-					auto result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
-							recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline);
-						});
-					if (result.has_value()) {
-						presenter = result.value();
-
-						glfwPollEvents();
-
-						s.endOfFrame();
-
-						framesLeft--;
-					}
-					else {
-						break;
-					}
-				}
-
-				s.vkDevice.waitIdle();
-			});
-
-			bainangua::destroyPipeline(presenter->swapChainDevice_, pipeline);
-
-			presenter->teardown();
-
-			return true;
-		};
-	
-	EXPECT_NO_THROW(
-		createVulkanContext(
-			VulkanContextConfig{
-				.AppName = "OneFrame Test App",
-				.requiredExtensions = {
-						VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-				},
-				.useValidation = false,
-				.innerCode = renderLoop
-			}
-		)
-	);
-	EXPECT_EQ(
-		createVulkanContext(
-			VulkanContextConfig{
-				.AppName = "OneFrame Test App",
-				.requiredExtensions = {
-						VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-				},
-				.useValidation = false,
-				.innerCode = renderLoop
-			}
-		),
-		(tl::expected<int,std::string>(0))
-	);
-
-}
-
-
-TEST(OneFrame, VertexBuffer)
-{
-	auto recordCommandBuffer = [](vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, std::shared_ptr<bainangua::PresentationLayer> presenter, const bainangua::PipelineBundle& pipeline, VkBuffer vertexBuffer)
-		{
-			vk::CommandBufferBeginInfo beginInfo({}, {});
-			buffer.begin(beginInfo);
-
-			std::array<vk::ClearValue, 1> clearColors{ vk::ClearValue() };
-
-			vk::RenderPassBeginInfo renderPassInfo(
-				pipeline.renderPass,
-				swapChainImage,
-				vk::Rect2D({ 0,0 }, presenter->swapChainExtent2D_),
-				clearColors
-			);
-			buffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-
-			buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.graphicsPipelines[0]);
-
-			vk::Viewport viewport(
-				0.0f,
-				0.0f,
-				static_cast<float>(presenter->swapChainExtent2D_.width),
-				static_cast<float>(presenter->swapChainExtent2D_.height),
-				0.0f,
-				1.0f
-			);
-			buffer.setViewport(0, 1, &viewport);
-
-			vk::Buffer vertexBuffers[] = { vertexBuffer };
-			vk::DeviceSize offsets[] = { 0 };
-			buffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
-
-			vk::Rect2D scissor({ 0,0 }, presenter->swapChainExtent2D_);
-			buffer.setScissor(0, 1, &scissor);
-
-			buffer.draw(3, 1, 0, 0);
-
-			buffer.endRenderPass();
-
-			buffer.end();
-		};
-
-	// renders 10 frames and then stops
-	auto renderLoop = [&recordCommandBuffer](VulkanContext& s) -> bool {
-		std::shared_ptr<PresentationLayer> presenter = buildPresentationLayer(s);
-
-		std::filesystem::path shader_path = SHADER_DIR;
-		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createVTVertexPipeline(presenter, (shader_path / "PosColor.vert_spv"), (shader_path / "PosColor.frag_spv")));
-		if (!pipelineResult.has_value()) {
-			presenter->teardown();
-			return false;
+auto wrapRenderLoop(std::string_view name, std::function<bool(VulkanContext&)> renderLoop) -> tl::expected<int, std::string> {
+	return createVulkanContext(
+		VulkanContextConfig{
+			.AppName = std::string(name),
+			.requiredExtensions = {
+					VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
+					VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
+					VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
+			},
+			.useValidation = false,
+			.innerCode = renderLoop
 		}
-		bainangua::PipelineBundle pipeline = pipelineResult.value();
-
-		presenter->connectRenderPass(pipeline.renderPass);
-
-		vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
-
-		bainangua::withCommandPool(s, poolInfo, [&](vk::CommandPool pool) {
-			std::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, bainangua::MultiFrameCount));
-
-			auto vertexResult = bainangua::createGPUVertexBuffer(s.vmaAllocator, s, pool, bainangua::staticVertices);
-			auto [vertexBuffer, bufferMemory] = vertexResult.value();
-
-			size_t framesLeft = 10;
-
-			while (!glfwWindowShouldClose(s.glfwWindow) && framesLeft > 0) {
-
-				size_t multiFrameIndex = framesLeft % bainangua::MultiFrameCount;
-
-				auto result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
-					recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline, vertexBuffer);
-					});
-				if (result.has_value()) {
-					presenter = result.value();
-
-					glfwPollEvents();
-
-					s.endOfFrame();
-
-					framesLeft--;
-				}
-				else {
-					break;
-				}
-			}
-
-			s.vkDevice.waitIdle();
-			bainangua::destroyVertexBuffer(s.vmaAllocator, vertexBuffer, bufferMemory);
-		});
-
-		bainangua::destroyPipeline(presenter->swapChainDevice_, pipeline);
-
-		presenter->teardown();
-
-		return true;
-		};
-
-	EXPECT_NO_THROW(
-		createVulkanContext(
-			VulkanContextConfig{
-				.AppName = "OneFrame Test App",
-				.requiredExtensions = {
-						VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-				},
-				.useValidation = false,
-				.innerCode = renderLoop
-			}
-		)
 	);
-	EXPECT_EQ(
-		createVulkanContext(
-			VulkanContextConfig{
-				.AppName = "OneFrame Test App",
-				.requiredExtensions = {
-						VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-				},
-				.useValidation = false,
-				.innerCode = renderLoop
-			}
-		),
-		(tl::expected<int, std::string>(0))
-	);
-
 }
 
-TEST(OneFrame, IndexBuffer)
-{
-	auto recordCommandBuffer = [](vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, std::shared_ptr<bainangua::PresentationLayer> presenter, const bainangua::PipelineBundle& pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer) {
-		vk::CommandBufferBeginInfo beginInfo({}, {});
-		buffer.begin(beginInfo);
+template <typename RowFunction>
+auto wrapRenderLoopRow(std::string_view name, RowFunction f) -> tl::expected<int, std::string> {
+	return wrapRenderLoop(
+		name,
+		[&](VulkanContext& s) -> bool {
+			auto r = boost::hana::make_map(
+				boost::hana::make_pair(BOOST_HANA_STRING("context"), s),
+				boost::hana::make_pair(BOOST_HANA_STRING("device"), s.vkDevice)
+			);
+			auto result = f.applyRow(r);
+			return true;
+		}
+	);
+}
 
-		std::array<vk::ClearValue, 1> clearColors{ vk::ClearValue() };
+struct DrawNoVertexGeometry {
+	using row_tag = RowType::RowFunctionTag;
+	using return_type = void;
 
-		vk::RenderPassBeginInfo renderPassInfo(
-			pipeline.renderPass,
-			swapChainImage,
-			vk::Rect2D({ 0,0 }, presenter->swapChainExtent2D_),
-			clearColors
-		);
-		buffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+	template<typename Row>
+	constexpr void applyRow(Row r) {
+		vk::CommandBuffer buffer = boost::hana::at_key(r, BOOST_HANA_STRING("primaryCommandBuffer"));
+		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
+		size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
 
-		buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.graphicsPipelines[0]);
+		buffer.draw(3, 1, 0, 0);
+	}
+};
 
-		vk::Viewport viewport(
-			0.0f,
-			0.0f,
-			static_cast<float>(presenter->swapChainExtent2D_.width),
-			static_cast<float>(presenter->swapChainExtent2D_.height),
-			0.0f,
-			1.0f
-		);
-		buffer.setViewport(0, 1, &viewport);
+struct DrawVertexGeometry {
+	using row_tag = RowType::RowFunctionTag;
+	using return_type = void;
 
-		vk::Rect2D scissor({ 0,0 }, presenter->swapChainExtent2D_);
-		buffer.setScissor(0, 1, &scissor);
+	template<typename Row>
+	constexpr void applyRow(Row r) {
+		vk::CommandBuffer buffer = boost::hana::at_key(r, BOOST_HANA_STRING("primaryCommandBuffer"));
+		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
+		auto [vertexBuffer, bufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("vertexBuffer"));
+		size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
+
+		vk::Buffer vertexBuffers[] = { vertexBuffer };
+		vk::DeviceSize offsets[] = { 0 };
+		buffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+
+		buffer.draw(static_cast<uint32_t>(bainangua::staticVertices.size()), 1, 0, 0);
+	}
+};
+
+struct DrawIndexedVertexGeometry {
+	using row_tag = RowType::RowFunctionTag;
+	using return_type = void;
+
+	template<typename Row>
+	requires   RowType::has_named_field<Row, BOOST_HANA_STRING("indexBuffer"), std::tuple<vk::Buffer, VmaAllocation>>
+			&& RowType::has_named_field<Row, BOOST_HANA_STRING("indexedVertexBuffer"), std::tuple<vk::Buffer, VmaAllocation>>
+	constexpr void applyRow(Row r) {
+		vk::CommandBuffer buffer = boost::hana::at_key(r, BOOST_HANA_STRING("primaryCommandBuffer"));
+		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
+		auto [vertexBuffer, bufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("indexedVertexBuffer"));
+		auto [indexBuffer, indexBufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("indexBuffer"));
+		size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
 
 		vk::Buffer vertexBuffers[] = { vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
@@ -356,88 +118,83 @@ TEST(OneFrame, IndexBuffer)
 
 		buffer.drawIndexed(static_cast<uint32_t>(bainangua::staticIndices.size()), 1, 0, 0, 0);
 
-		buffer.endRenderPass();
+		buffer.draw(static_cast<uint32_t>(bainangua::staticVertices.size()), 1, 0, 0);
+	}
+};
 
-		buffer.end();
-		};
+TEST(VulkanContext, BasicTest)
+{
+	EXPECT_NO_THROW(
+		wrapRenderLoopRow(
+			"Basic Test", 
+			NoRenderLoop()
+		)
+	);
+}
 
-	auto renderLoop = [=](bainangua::VulkanContext& s) -> bool {
-		std::shared_ptr<bainangua::PresentationLayer> presenter = buildPresentationLayer(s);
+TEST(PresentationLayer, BasicTest)
+{
+	EXPECT_NO_THROW(
+		wrapRenderLoopRow(
+			"PresentationLayer Pipeline Test App", 
+			PresentationLayerStage() | NoRenderLoop()
+		)
+	);
+}
 
-		std::filesystem::path shader_path = SHADER_DIR; // defined via CMake in white_pumpkin.hpp
-		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createVTVertexPipeline(presenter, (shader_path / "PosColor.vert_spv"), (shader_path / "PosColor.frag_spv")));
-		if (!pipelineResult.has_value()) {
-			presenter->teardown();
-			return false;
-		}
-		bainangua::PipelineBundle pipeline = pipelineResult.value();
-
-		presenter->connectRenderPass(pipeline.renderPass);
-
-		vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
-
-		bainangua::withCommandPool(s, poolInfo, [&](vk::CommandPool pool) {
-			auto vertexResult = bainangua::createGPUVertexBuffer(s.vmaAllocator, s, pool, bainangua::indexedStaticVertices);
-			auto [vertexBuffer, bufferMemory] = vertexResult.value();
-
-			auto indexResult = bainangua::createGPUIndexBuffer(s.vmaAllocator, s, pool, bainangua::staticIndices);
-			auto [indexBuffer, indexBufferMemory] = indexResult.value();
-
-			std::pmr::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, bainangua::MultiFrameCount));
-
-			size_t multiFrameIndex = 0;
-			unsigned int framesLeft = 10;
-
-			while (!glfwWindowShouldClose(s.glfwWindow) && framesLeft > 0) {
-
-				tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result> result = bainangua::drawOneFrame(s, presenter, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
-						recordCommandBuffer(commandbuffer, framebuffer, presenter, pipeline, vertexBuffer, indexBuffer);
-					});
-				if (result.has_value()) {
-					presenter = result.value();
-
-					glfwPollEvents();
-
-					s.endOfFrame();
-
-					multiFrameIndex = (multiFrameIndex + 1) % bainangua::MultiFrameCount;
-
-					framesLeft--;
-				}
-				else {
-					break;
-				}
-			}
-
-			s.vkDevice.waitIdle();
-
-			bainangua::destroyVertexBuffer(s.vmaAllocator, vertexBuffer, bufferMemory);
-			bainangua::destroyVertexBuffer(s.vmaAllocator, indexBuffer, indexBufferMemory);
-		});
-
-		bainangua::destroyPipeline(presenter->swapChainDevice_, pipeline);
-
-		presenter->teardown();
-
-		return true;
-	};
-
+TEST(OneFrame, BasicTest)
+{
 	EXPECT_EQ(
-		createVulkanContext(
-			VulkanContextConfig{
-				.AppName = "OneFrame Test App",
-				.requiredExtensions = {
-						VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
-						VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-				},
-				.useValidation = false,
-				.innerCode = renderLoop
-			}
+		wrapRenderLoopRow(
+			"OneFrame Pipeline Test App",
+			PresentationLayerStage()
+			| NoVertexPipelineStage(ShaderPath)
+			| bainangua::SimpleGraphicsCommandPoolStage()
+			| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
+			| StandardMultiFrameLoop(10)
+			| BasicRendering()
+			| DrawNoVertexGeometry()
+		),
+		(tl::expected<int,std::string>(0))
+	);
+}
+
+TEST(OneFrame, VertexBuffer)
+{
+	EXPECT_EQ(
+		wrapRenderLoopRow(
+			"VertexBuffer Pipeline Test App",
+			PresentationLayerStage()
+			| VTVertexPipelineStage(ShaderPath)
+			| bainangua::SimpleGraphicsCommandPoolStage()
+			| GPUVertexBufferStage()
+			| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
+			| StandardMultiFrameLoop(10)
+			| BasicRendering()
+			| DrawVertexGeometry()
 		),
 		(tl::expected<int, std::string>(0))
 	);
 
+}
+
+TEST(OneFrame, IndexBuffer)
+{
+	EXPECT_EQ(
+		wrapRenderLoopRow(
+			"IndexBuffer Pipeline Test App",
+			PresentationLayerStage()
+			| VTVertexPipelineStage(ShaderPath)
+			| bainangua::SimpleGraphicsCommandPoolStage()
+			| GPUIndexedVertexBufferStage()
+			| GPUIndexBufferStage()
+			| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
+			| StandardMultiFrameLoop(10)
+			| BasicRendering()
+			| DrawIndexedVertexGeometry()
+		),
+		(tl::expected<int, std::string>(0))
+	);
 }
 
 }

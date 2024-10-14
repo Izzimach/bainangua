@@ -254,13 +254,38 @@ export struct GPUVertexBufferStage {
 		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 		vk::CommandPool commandPool = boost::hana::at_key(r, BOOST_HANA_STRING("commandPool"));
 
-		auto vertexResult = bainangua::createGPUVertexBuffer(context.vmaAllocator, context, commandPool, bainangua::indexedStaticVertices);
+		auto vertexResult = bainangua::createGPUVertexBuffer(context.vmaAllocator, context, commandPool, bainangua::staticVertices);
 		if (!vertexResult.has_value()) {
 			return tl::make_unexpected<bng_errorobject>("GPUVertexBufferStage: could not create GPU vertex buffer");
 		}
 
 		auto vertexValue = vertexResult.value();
 		auto rWithVertexBuffer = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("vertexBuffer"), vertexValue));
+		auto result = f.applyRow(rWithVertexBuffer);
+
+		bainangua::destroyVertexBuffer(context.vmaAllocator, vertexValue);
+
+		return result;
+	}
+};
+export struct GPUIndexedVertexBufferStage {
+	using row_tag = RowType::RowWrapperTag;
+
+	template <typename WrappedReturnType>
+	using return_type_transformer = WrappedReturnType;
+
+	template <typename RowFunction, typename Row>
+	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::CommandPool commandPool = boost::hana::at_key(r, BOOST_HANA_STRING("commandPool"));
+
+		auto vertexResult = bainangua::createGPUVertexBuffer(context.vmaAllocator, context, commandPool, bainangua::indexedStaticVertices);
+		if (!vertexResult.has_value()) {
+			return tl::make_unexpected<bng_errorobject>("GPUVertexBufferStage: could not create GPU vertex buffer");
+		}
+
+		auto vertexValue = vertexResult.value();
+		auto rWithVertexBuffer = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("indexedVertexBuffer"), vertexValue));
 		auto result = f.applyRow(rWithVertexBuffer);
 
 		bainangua::destroyVertexBuffer(context.vmaAllocator, vertexValue);

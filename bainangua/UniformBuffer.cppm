@@ -102,7 +102,7 @@ export auto createUniformBuffers(VmaAllocator allocator) -> bng_expected<std::pm
 	return uniformBuffers;
 }
 
-export auto updateUniformBuffer(const PresentationLayer& presenter, const UniformBufferBundle& UBOBundle)  -> void {
+export auto updateUniformBuffer(vk::Extent2D viewportExtent, const UniformBufferBundle& UBOBundle)  -> void {
 	static auto startTime = std::chrono::high_resolution_clock::now();
 
 	auto currentTime = std::chrono::high_resolution_clock::now();
@@ -111,7 +111,7 @@ export auto updateUniformBuffer(const PresentationLayer& presenter, const Unifor
 	BasicUBO ubo{};
 	ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 	ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-	float aspectRatio = presenter.swapChainExtent2D_.width / (float)presenter.swapChainExtent2D_.height;
+	float aspectRatio = viewportExtent.width / (float)viewportExtent.height;
 	ubo.projection = glm::perspective(glm::radians(45.0f), aspectRatio, 0.1f, 10.0f);
 	ubo.projection[1][1] *= -1;
 

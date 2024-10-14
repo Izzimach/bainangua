@@ -28,7 +28,7 @@ import VertexBuffer;
 import UniformBuffer;
 import DescriptorSets;
 
-void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, std::shared_ptr<bainangua::PresentationLayer> presenterptr, const bainangua::PipelineBundle &pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer, vk::DescriptorSet uboDescriptorSet) {
+void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, vk::Extent2D swapChainExtent, const bainangua::PipelineBundle &pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer, vk::DescriptorSet uboDescriptorSet) {
 	vk::CommandBufferBeginInfo beginInfo({}, {});
 	buffer.begin(beginInfo);
 
@@ -37,7 +37,7 @@ void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImag
 	vk::RenderPassBeginInfo renderPassInfo(
 		pipeline.renderPass,
 		swapChainImage,
-		vk::Rect2D({ 0,0 }, presenterptr->swapChainExtent2D_),
+		vk::Rect2D({ 0,0 }, swapChainExtent),
 		clearColors
 	);
 	buffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
@@ -47,14 +47,14 @@ void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImag
 	vk::Viewport viewport(
 		0.0f,
 		0.0f,
-		static_cast<float>(presenterptr->swapChainExtent2D_.width),
-		static_cast<float>(presenterptr->swapChainExtent2D_.height),
+		static_cast<float>(swapChainExtent.width),
+		static_cast<float>(swapChainExtent.height),
 		0.0f,
 		1.0f
 		);
 	buffer.setViewport(0, 1, &viewport);
 
-	vk::Rect2D scissor({ 0,0 }, presenterptr->swapChainExtent2D_);
+	vk::Rect2D scissor({ 0,0 }, swapChainExtent);
 	buffer.setScissor(0, 1, &scissor);
 
 	vk::Buffer vertexBuffers[] = { vertexBuffer };
@@ -73,9 +73,61 @@ void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImag
 }
 
 
+
+
+
+
+struct DrawIndexedGeometry {
+	using row_tag = RowType::RowFunctionTag;
+	using return_type = void;
+
+	template<typename Row>
+	constexpr void applyRow(Row r) {
+		vk::CommandBuffer buffer = boost::hana::at_key(r, BOOST_HANA_STRING("primaryCommandBuffer"));
+		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
+		auto [vertexBuffer, bufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("indexedVertexBuffer"));
+		auto [indexBuffer, indexBufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("indexBuffer"));
+		std::pmr::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
+		size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
+
+		vk::Buffer vertexBuffers[] = { vertexBuffer };
+		vk::DeviceSize offsets[] = { 0 };
+		buffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+
+		buffer.bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint16);
+
+		buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipelineLayout, 0, 1, &(descriptorSets[multiFrameIndex]), 0, nullptr);
+
+		buffer.drawIndexed(static_cast<uint32_t>(bainangua::staticIndices.size()), 1, 0, 0, 0);
+	}
+};
+
+struct UpdateUniformBuffer {
+	using row_tag = RowType::RowWrapperTag;
+
+	template <typename WrappedReturnType>
+	using return_type_transformer = tl::expected<int, std::pmr::string>;
+
+	template <typename RowFunction, typename Row>
+	constexpr tl::expected<int, std::pmr::string> wrapRowFunction(RowFunction f, Row r) {
+		std::pmr::vector<bainangua::UniformBufferBundle> uniformBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("uniformBuffers"));
+		size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
+		vk::Extent2D viewportExtent = boost::hana::at_key(r, BOOST_HANA_STRING("viewportExtent"));
+
+		bainangua::updateUniformBuffer(viewportExtent, uniformBuffers[multiFrameIndex]);
+
+		return f.applyRow(r);
+	}
+};
+
+
+
+
+
+
 template <typename Row>
-auto renderLoop(Row r) -> tl::expected<int, std::pmr::string> {
-	bainangua::VulkanContext &s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+auto renderLoop (Row r) -> tl::expected<int, std::pmr::string> {
+	bainangua::VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 	std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 	bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
 
@@ -96,25 +148,25 @@ auto renderLoop(Row r) -> tl::expected<int, std::pmr::string> {
 
 		tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result> result =
 			bainangua::drawOneFrame(s, presenterptr, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
-				updateUniformBuffer(*presenterptr, uniformBuffers[multiFrameIndex]);
-				recordCommandBuffer(commandbuffer, framebuffer, presenterptr, pipeline, vertexBuffer, indexBuffer, descriptorSets[multiFrameIndex]);
-			})
+				updateUniformBuffer(presenterptr->swapChainExtent2D_, uniformBuffers[multiFrameIndex]);
+				recordCommandBuffer(commandbuffer, framebuffer, presenterptr->swapChainExtent2D_, pipeline, vertexBuffer, indexBuffer, descriptorSets[multiFrameIndex]);
+				})
 			.and_then([&](std::shared_ptr<bainangua::PresentationLayer> newPresenter) {
-				presenterptr = newPresenter;
+			presenterptr = newPresenter;
 
-				glfwPollEvents();
-				s.endOfFrame();
-				multiFrameIndex = (multiFrameIndex + 1) % bainangua::MultiFrameCount;
+			glfwPollEvents();
+			s.endOfFrame();
+			multiFrameIndex = (multiFrameIndex + 1) % bainangua::MultiFrameCount;
 
-				return tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result>(newPresenter);
-			});
+			return tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result>(newPresenter);
+				});
 		if (!result) break;
 	}
 
 	s.vkDevice.waitIdle();
 
 	return 0;
-}
+};
 
 struct InvokeRenderLoop {
 	using row_tag = RowType::RowFunctionTag;
@@ -152,20 +204,21 @@ int main()
 			.useValidation = true,
 #endif
 			.innerCode = [=](bainangua::VulkanContext& s) -> bool {
-				auto stageRow = boost::hana::make_map(
-					boost::hana::make_pair(BOOST_HANA_STRING("context"), s)
-				);
+				auto stageRow = boost::hana::make_map(boost::hana::make_pair(BOOST_HANA_STRING("context"), s));
 				auto stages =
 					bainangua::PresentationLayerStage()
 					| bainangua::MVPPipelineStage(SHADER_DIR)
 					| bainangua::SimpleGraphicsCommandPoolStage()
-					| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
-					| bainangua::GPUVertexBufferStage()
+					| bainangua::GPUIndexedVertexBufferStage()
 					| bainangua::GPUIndexBufferStage()
 					| bainangua::CreateSimpleDescriptorPoolStage(vk::DescriptorType::eUniformBuffer, bainangua::MultiFrameCount)
 					| bainangua::CreateSimpleDescriptorSetsStage(vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex, bainangua::MultiFrameCount)
 					| bainangua::CreateAndLinkUniformBuffersStage()
-					| InvokeRenderLoop();
+					| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
+					| bainangua::StandardMultiFrameLoop()
+					| UpdateUniformBuffer()
+					| bainangua::BasicRendering()
+					| DrawIndexedGeometry();
 				
 				auto stageResult = stages.applyRow(stageRow);
 

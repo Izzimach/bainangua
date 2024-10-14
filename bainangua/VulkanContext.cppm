@@ -244,11 +244,10 @@ struct StandardDevice {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
+    requires     RowType::has_named_field<Row, BOOST_HANA_STRING("instance"),       vk::Instance>
+              && RowType::has_named_field<Row, BOOST_HANA_STRING("physicalDevice"), vk::PhysicalDevice>
+              && RowType::has_named_field<Row, BOOST_HANA_STRING("surface"),        vk::SurfaceKHR>
     constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-        static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>, "Row must have field named 'instance'");
-        static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("physicalDevice"), vk::PhysicalDevice>, "Row must have field named 'physicalDevice'");
-        static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("surface"), vk::SurfaceKHR>, "Row must have field named 'surface'");
-
         vk::Instance instance             = boost::hana::at_key(r, BOOST_HANA_STRING("instance"));
         vk::PhysicalDevice physicalDevice = boost::hana::at_key(r, BOOST_HANA_STRING("physicalDevice"));
         vk::SurfaceKHR surface            = boost::hana::at_key(r, BOOST_HANA_STRING("surface"));
