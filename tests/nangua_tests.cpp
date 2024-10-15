@@ -1,5 +1,4 @@
 
-
 #include "bainangua.hpp"
 #include "gtest/gtest.h"
 #include "nangua_tests.hpp"
@@ -125,10 +124,7 @@ struct DrawIndexedVertexGeometry {
 TEST(VulkanContext, BasicTest)
 {
 	EXPECT_NO_THROW(
-		wrapRenderLoopRow(
-			"Basic Test", 
-			NoRenderLoop()
-		)
+		wrapRenderLoopRow("Basic Test", NoRenderLoop())
 	);
 }
 
@@ -175,7 +171,6 @@ TEST(OneFrame, VertexBuffer)
 		),
 		(tl::expected<int, std::string>(0))
 	);
-
 }
 
 TEST(OneFrame, IndexBuffer)
