@@ -1,6 +1,8 @@
 ﻿
 #include "include/RowType.hpp"
 
+#include <iostream>
+#include <format>
 
 void RowType::testRowTypes() {
 	auto singleRow = boost::hana::make_map(
@@ -19,5 +21,5 @@ void RowType::testRowTypes() {
 		| PullFromMapFunction();
 	auto val = rowFn.applyRow(singleRow);
 
-	fmt::print("{}\n", val);
+	std::cout << std::format("{}\n", val);
 }

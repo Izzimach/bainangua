@@ -2,7 +2,7 @@
 # Root CMAKE file for bainangua
 #
 
-cmake_minimum_required (VERSION 3.29)
+cmake_minimum_required (VERSION 3.28)
 
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141)
@@ -15,7 +15,6 @@ if (WIN32)
   add_definitions(-D_WIN32_WINNT=0x0A00)
 endif()
 
-
 #
 # main project and subdirectories
 
@@ -25,20 +24,6 @@ project ("bainangua")
 
 set(ASSETS_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets)
 
-#
-# documentation generation via doxygen
-
-find_package(Doxygen
-			 OPTIONAL_COMPONENTS dot mscgen dia)
-
-list(APPEND DOXYGEN_EXCLUDE_PATTERNS tanuki.hpp)
-set(DOXYGEN_GENERATE_HTML YES)
-set(DOXYGEN_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/doxygen)
-
-doxygen_add_docs(
-	doxygen
-	bainangua
-	)
 
 # library and example app
 

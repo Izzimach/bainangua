@@ -9,7 +9,7 @@
 #include <boost/hana/type.hpp>
 #include <boost/hana/string.hpp>
 
-#include <fmt/format.h>
+#include <string>
 
 namespace RowType {
 

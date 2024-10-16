@@ -51,7 +51,6 @@ target_link_libraries(bainangua PUBLIC glfw)
 target_link_libraries(bainangua PUBLIC immer)
 target_link_libraries(bainangua PUBLIC Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator)
 target_link_libraries(bainangua INTERFACE Boost::hana Boost::asio)
-#target_link_libraries(bainangua INTERFACE blaze::blaze)
 
 #
 # experimental stuff
@@ -117,9 +116,9 @@ target_include_directories(white_pumpkin PRIVATE
     )
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    target_compile_options(bainangua PRIVATE /W4)
+    target_compile_options(white_pumpkin PRIVATE /W4)
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_compile_options(bainangua PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(white_pumpkin PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 
