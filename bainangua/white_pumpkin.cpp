@@ -27,6 +27,7 @@ import PresentationLayer;
 import VertexBuffer;
 import UniformBuffer;
 import DescriptorSets;
+import TextureImage;
 
 void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, vk::Extent2D swapChainExtent, const bainangua::PipelineBundle &pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer, vk::DescriptorSet uboDescriptorSet) {
 	vk::CommandBufferBeginInfo beginInfo({}, {});
@@ -77,7 +78,7 @@ void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImag
 
 
 
-struct DrawIndexedGeometry {
+struct DrawMVPIndexedGeometry {
 	using row_tag = RowType::RowFunctionTag;
 	using return_type = void;
 
@@ -106,10 +107,10 @@ struct UpdateUniformBuffer {
 	using row_tag = RowType::RowWrapperTag;
 
 	template <typename WrappedReturnType>
-	using return_type_transformer = tl::expected<int, std::pmr::string>;
+	using return_type_transformer = WrappedReturnType;
 
 	template <typename RowFunction, typename Row>
-	constexpr tl::expected<int, std::pmr::string> wrapRowFunction(RowFunction f, Row r) {
+	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
 		std::pmr::vector<bainangua::UniformBufferBundle> uniformBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("uniformBuffers"));
 		size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
 		vk::Extent2D viewportExtent = boost::hana::at_key(r, BOOST_HANA_STRING("viewportExtent"));
@@ -126,7 +127,7 @@ struct UpdateUniformBuffer {
 
 
 template <typename Row>
-auto renderLoop (Row r) -> tl::expected<int, std::pmr::string> {
+auto renderLoop (Row r) -> bainangua::bng_expected<bool> {
 	bainangua::VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 	std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 	bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
@@ -152,15 +153,18 @@ auto renderLoop (Row r) -> tl::expected<int, std::pmr::string> {
 				recordCommandBuffer(commandbuffer, framebuffer, presenterptr->swapChainExtent2D_, pipeline, vertexBuffer, indexBuffer, descriptorSets[multiFrameIndex]);
 				})
 			.and_then([&](std::shared_ptr<bainangua::PresentationLayer> newPresenter) {
-			presenterptr = newPresenter;
+				presenterptr = newPresenter;
 
-			glfwPollEvents();
-			s.endOfFrame();
-			multiFrameIndex = (multiFrameIndex + 1) % bainangua::MultiFrameCount;
+				glfwPollEvents();
+				s.endOfFrame();
+				multiFrameIndex = (multiFrameIndex + 1) % bainangua::MultiFrameCount;
 
-			return tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result>(newPresenter);
-				});
-		if (!result) break;
+				return tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result>(newPresenter);
+			});
+		if (!result) {
+			s.vkDevice.waitIdle();
+			return formatVkResultError("error presenting frame", result.error());
+		}
 	}
 
 	s.vkDevice.waitIdle();
@@ -170,10 +174,10 @@ auto renderLoop (Row r) -> tl::expected<int, std::pmr::string> {
 
 struct InvokeRenderLoop {
 	using row_tag = RowType::RowFunctionTag;
-	using return_type = tl::expected<int, std::pmr::string>;
+	using return_type = bainangua::bng_expected<bool>;
 
 	template<typename Row>
-	constexpr tl::expected<int, std::pmr::string> applyRow(Row r) { return renderLoop(r); }
+	constexpr bainangua::bng_expected<bool> applyRow(Row r) { return renderLoop(r); }
 };
 
 
@@ -191,7 +195,8 @@ int main()
 	std::pmr::polymorphic_allocator<> default_pmr_allocator(&default_pmr_resource);
 	std::pmr::set_default_resource(&default_pmr_resource);
 
-	tl::expected<int, std::string> programResult = bainangua::createVulkanContext(
+
+	bainangua::bng_expected<bool> programResult = bainangua::createVulkanContext(
 		bainangua::VulkanContextConfig{
 			.AppName = "My Test App",
 			.requiredExtensions = {
@@ -203,32 +208,33 @@ int main()
 #else
 			.useValidation = true,
 #endif
-			.innerCode = [=](bainangua::VulkanContext& s) -> bool {
+			.innerCode = [=](bainangua::VulkanContext& s) -> bainangua::bng_expected<bool> {
 				auto stageRow = boost::hana::make_map(boost::hana::make_pair(BOOST_HANA_STRING("context"), s));
 				auto stages =
 					bainangua::PresentationLayerStage()
-					| bainangua::MVPPipelineStage(SHADER_DIR)
+					| bainangua::TexPipelineStage(SHADER_DIR)
 					| bainangua::SimpleGraphicsCommandPoolStage()
-					| bainangua::GPUIndexedVertexBufferStage()
+					| bainangua::GPUIndexedVertexBufferStage(bainangua::indexedStaticTexVertices)
 					| bainangua::GPUIndexBufferStage()
-					| bainangua::CreateSimpleDescriptorPoolStage(vk::DescriptorType::eUniformBuffer, bainangua::MultiFrameCount)
-					| bainangua::CreateSimpleDescriptorSetsStage(vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex, bainangua::MultiFrameCount)
+					| bainangua::CreateCombinedDescriptorPoolStage(bainangua::MultiFrameCount)
+					| bainangua::CreateCombinedDescriptorSetsStage(bainangua::MultiFrameCount)
 					| bainangua::CreateAndLinkUniformBuffersStage()
+					| bainangua::FromFileTextureImageStage(TEXTURES_DIR / std::filesystem::path("default.jpg"))
+					| bainangua::Basic2DSamplerStage()
+					| bainangua::LinkImageToDescriptorsStage()
 					| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
 					| bainangua::StandardMultiFrameLoop()
 					| UpdateUniformBuffer()
 					| bainangua::BasicRendering()
-					| DrawIndexedGeometry();
+					| DrawMVPIndexedGeometry();
 				
-				auto stageResult = stages.applyRow(stageRow);
-
-				return true;
+				return stages.applyRow(stageRow);
 			}
 		}
 	);
 
 	if (programResult.has_value()) {
-		return programResult.value();
+		return 0;
 	}
 	else {
 		std::cout << std::format("program error: {}\n", programResult.error());

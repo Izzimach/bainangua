@@ -19,6 +19,7 @@ export module UniformBuffer;
 
 import VulkanContext;
 import PresentationLayer; // for MultiFrameCount
+import DescriptorSets;
 
 export struct BasicUBO {
 	glm::mat4 model;
@@ -27,24 +28,6 @@ export struct BasicUBO {
 };
 
 namespace bainangua {
-
-export
-auto createDescriptorSetLayout(vk::Device device) -> bng_expected<vk::DescriptorSetLayout> {
-	vk::DescriptorSetLayoutBinding uboLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex, nullptr);
-
-	vk::DescriptorSetLayoutCreateInfo layoutInfo({}, 1, &uboLayoutBinding);
-	vk::DescriptorSetLayout descriptorSetLayout;
-
-	vk::Result createResult = device.createDescriptorSetLayout(&layoutInfo, nullptr, &descriptorSetLayout);
-	if (createResult == vk::Result::eSuccess) {
-		return descriptorSetLayout;
-	}
-	else {
-		std::pmr::string errorMessage;
-		std::format_to(std::back_inserter(errorMessage), "createDescriptorSetLayout: could not create descriptor set layout, error={}", vkResultToString((static_cast<VkResult>(createResult))));
-		return tl::make_unexpected(errorMessage);
-	}
-}
 
 export struct UniformBufferBundle {
 	vk::Buffer ubo;

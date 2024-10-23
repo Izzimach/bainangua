@@ -71,7 +71,7 @@ export struct VulkanContextConfig {
 
     bool useValidation;
 
-    std::function<bool(VulkanContext&)> innerCode; //!< called once all the Vulkan handles are created for the VulkanContext
+    std::function<bng_expected<bool>(VulkanContext&)> innerCode; //!< called once all the Vulkan handles are created for the VulkanContext
 };
 
 
@@ -99,7 +99,9 @@ ReturnObject doNothingEndFrame()
 {
     for (unsigned i = 0;; ++i) {
         co_await std::suspend_always();
-        std::cout << std::format("counter: {}\n", i);
+        if (i % 10 == 0) {
+            std::cout << std::format("counter: {}\n", i);
+        }
     }
 }
 
@@ -122,7 +124,7 @@ static void framebufferResizeCallback(GLFWwindow* window, int /*width*/, int /*h
 
 
 template <typename Row>
-tl::expected<int, std::string> invokeInnerCode(Row r)
+bng_expected<bool> invokeInnerCode(Row r)
 {
     static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig>, "Row must have field named 'config'");
     static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>, "Row must have field named 'instance'");
@@ -148,43 +150,43 @@ tl::expected<int, std::string> invokeInnerCode(Row r)
     vk::Queue presentQueue            = boost::hana::at_key(r, BOOST_HANA_STRING("presentQueue"));
     VmaAllocator graphicsAllocator    = boost::hana::at_key(r, BOOST_HANA_STRING("vmaAllocator"));
 
+    bng_expected<bool> result;
     try
     {
         VulkanContext vkState{ instance, window, physicalDevice, device, surface, graphicsQueueFamilyIndex, graphicsQueue, presentQueueFamilyIndex, presentQueue, doNothingEndFrame(), graphicsAllocator, false };
         glfwSetWindowUserPointer(window, &vkState);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
-        bool result = config.innerCode(vkState);
-        if (!result) {
-            std::cout << std::format("inner code returned false\n");
-        }
+        result = config.innerCode(vkState);
         glfwSetWindowUserPointer(window, nullptr);
     }
     catch (vk::SystemError& err)
     {
-        std::cout << std::format("vk::SystemError: {}\n", err.what());
-        return tl::make_unexpected(err.what());
+        bng_errorobject errorString;
+        std::format_to(std::back_inserter(errorString), "vk::SystemError: {}", err.what());
+        result = tl::make_unexpected(errorString);
     }
     catch (std::exception& err)
     {
-        std::cout << std::format("std::exception: {}\n", err.what());
-        return tl::make_unexpected(err.what());
+        bng_errorobject errorString;
+        std::format_to(std::back_inserter(errorString), "std::exception: {}", err.what());
+        result = tl::make_unexpected(errorString);
     }
     catch (...)
     {
-        std::cout << std::format("unknown error!\n");
-        return tl::make_unexpected("unknown error!");
+        bng_errorobject errorString("unknown error");
+        result = tl::make_unexpected(errorString);
     }
 
-    return 0;
+    return result;
 }
 
 struct InvokeInnerCode {
     using row_tag = RowType::RowFunctionTag;
-    using return_type = tl::expected<int,std::string>;
+    using return_type = bng_expected<bool>;
 
     template<typename Row>
-    constexpr tl::expected<int,std::string> applyRow(Row r) { return invokeInnerCode(r); }
+    constexpr bng_expected<bool> applyRow(Row r) { return invokeInnerCode(r); }
 };
 
 struct StandardVMAAllocator {
@@ -286,11 +288,14 @@ struct StandardDevice {
         // create a Logical Device (finally!)
         std::array<const char*, 0> layers;
         std::pmr::vector<const char*> extensions{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+        vk::PhysicalDeviceFeatures features;
+        features.setSamplerAnisotropy(true);
         vk::DeviceCreateInfo deviceInfo(
             vk::DeviceCreateFlags(),
             queues,
             layers,
-            extensions
+            extensions,
+            &features
         );
         vk::Device device = physicalDevice.createDevice(deviceInfo);
 
@@ -345,7 +350,7 @@ struct CreateGLFWWindowAndSurface {
         VkResult err = glfwCreateWindowSurface(instance, window, nullptr, &surface);
         if (err != VK_SUCCESS)
         {
-            std::string s;
+            std::pmr::string s;
             std::format_to(std::back_inserter(s), "Error from glfwCreateWindowSurface: {}\n", +err);
             return tl::make_unexpected(s);
         }
@@ -378,8 +383,8 @@ struct FirstSwapchainPhysicalDevice {
         // enumerate the physicalDevices
         std::pmr::vector<vk::PhysicalDevice> physicalDevices = instance.enumeratePhysicalDevices<std::pmr::polymorphic_allocator<vk::PhysicalDevice>>();
 
-        // filter out devices that don't support a swapchain
-        auto deviceSupportsSwapchain = [](vk::PhysicalDevice device) {
+        // filter out devices that don't support a swapchain or anisotropy
+        auto deviceIsSuitable= [](vk::PhysicalDevice device) {
             // check device extensions
             std::pmr::vector<vk::ExtensionProperties> deviceProperties = device.enumerateDeviceExtensionProperties<std::pmr::polymorphic_allocator<vk::ExtensionProperties>>();
             std::cout << std::format("{} device properties supported\n", deviceProperties.size());
@@ -394,10 +399,12 @@ struct FirstSwapchainPhysicalDevice {
                         return e == std::string(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
                     }) != deviceProperties.end());
             std::cout << std::format("device supports swapchain = {}\n", supportsSwapchain);
-            return supportsSwapchain;
+
+            vk::PhysicalDeviceFeatures supportedFeatures(device.getFeatures());
+            return supportsSwapchain && supportedFeatures.samplerAnisotropy;
             };
 
-        auto swapchainDevices = std::views::filter(physicalDevices, deviceSupportsSwapchain);
+        auto swapchainDevices = std::views::filter(physicalDevices, deviceIsSuitable);
         vk::PhysicalDevice physicalDevice = swapchainDevices.front();
 
         auto rWithPhysicalDevice = boost::hana::insert(r,
@@ -544,7 +551,7 @@ struct GLFWOuterWrapper {
 };
 
 export
-auto createVulkanContext(const VulkanContextConfig& config) -> tl::expected<int, std::string>
+auto createVulkanContext(const VulkanContextConfig& config) -> bng_expected<bool>
 {
     auto configRow = boost::hana::make_map(boost::hana::make_pair(BOOST_HANA_STRING("config"), config));
 

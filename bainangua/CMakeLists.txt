@@ -33,7 +33,7 @@ target_sources(bainangua
     PUBLIC
     FILE_SET bainangua_modules 
     TYPE CXX_MODULES 
-    FILES "OneFrame.cppm" "VulkanContext.cppm" "PresentationLayer.cppm" "Pipeline.cppm" "Commands.cppm" "VertexBuffer.cppm" "UniformBuffer.cppm" "DescriptorSets.cppm")
+    FILES "OneFrame.cppm" "VulkanContext.cppm" "PresentationLayer.cppm" "Pipeline.cppm" "Commands.cppm" "VertexBuffer.cppm" "UniformBuffer.cppm" "DescriptorSets.cppm" "TextureImage.cppm")
 
 target_include_directories(bainangua PUBLIC
 	${CMAKE_CURRENT_SOURCE_DIR}
@@ -76,6 +76,8 @@ set(SHADER_FILES
     PosColor.vert
     PosColor.frag
     PosColorMVP.vert
+    TexturedMVP.vert
+    Textured.frag
     )
 
 set(SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/shaders")
@@ -85,10 +87,31 @@ add_custom_target(shaders ALL COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADE
 
 foreach (FILE ${SHADER_FILES})
     add_custom_command(
-        TARGET shaders
+        TARGET shaders POST_BUILD
         COMMAND glslc ${SHADER_SOURCE_DIR}/${FILE} -o ${SHADER_BINARY_DIR}/$<PATH:REPLACE_EXTENSION,${FILE},$<JOIN:$<LIST:APPEND,$<PATH:GET_EXTENSION,${FILE}>,spv>,_>>
         COMMENT "Compiling HLSL ${FILE}"
         VERBATIM)
+endforeach (FILE)
+
+#
+# texture copy
+#
+
+set (TEXTURE_FILES
+     default.jpg)
+
+set(TEXTURE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/textures")
+set(TEXTURE_BINARY_DIR "${ASSETS_BINARY_DIR}/textures")
+
+add_custom_target(textures ALL COMMAND ${CMAKE_COMMAND} -E make_directory ${TEXTURE_BINARY_DIR})
+
+foreach (FILE ${TEXTURE_FILES})
+    add_custom_command(
+        TARGET textures POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+                ${TEXTURE_SOURCE_DIR}/${FILE}
+                ${TEXTURE_BINARY_DIR}/${FILE}
+    )
 endforeach (FILE)
 
 #
@@ -127,3 +150,4 @@ target_link_libraries(white_pumpkin PRIVATE bainangua)
 target_link_libraries(white_pumpkin PRIVATE experimental_lib)
 
 add_dependencies(white_pumpkin shaders)
+add_dependencies(white_pumpkin textures)

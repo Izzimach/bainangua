@@ -11,6 +11,7 @@ module;
 export module VertexBuffer;
 
 import VulkanContext;
+import Commands;
 
 namespace bainangua {
 
@@ -46,6 +47,32 @@ export const std::vector<VTVertex> indexedStaticVertices = {
 
 export const std::vector<uint16_t> staticIndices = {
 	0, 1, 2, 2, 3, 0
+};
+
+export
+struct TexVertex {
+	glm::vec2 pos;
+	glm::vec3 color;
+	glm::vec2 texCoord;
+};
+
+export
+auto getTexVertexBindingAndAttributes() -> std::tuple<vk::VertexInputBindingDescription, std::vector<vk::VertexInputAttributeDescription>> {
+	vk::VertexInputBindingDescription bindingDescription(0, sizeof(TexVertex), vk::VertexInputRate::eVertex);
+	std::vector<vk::VertexInputAttributeDescription> attributes{
+		vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32Sfloat, offsetof(TexVertex, pos)),
+		vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(TexVertex, color)),
+		vk::VertexInputAttributeDescription(2, 0, vk::Format::eR32G32Sfloat, offsetof(TexVertex, texCoord))
+	};
+
+	return { bindingDescription, attributes };
+}
+
+export const std::vector<TexVertex> indexedStaticTexVertices = {
+	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f,0.0f}},
+	{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f,0.0f}},
+	{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f,1.0f}},
+	{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f,1.0f}}
 };
 
 export
@@ -90,29 +117,12 @@ auto createVertexBuffer(VmaAllocator allocator, const std::vector<V>& vertexData
 
 export
 auto copyBuffer(const VulkanContext& s, vk::CommandPool pool, VkBuffer source, VkBuffer dest, size_t dataSize) -> vk::Result {
-	std::pmr::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
+	return submitCommand(s, pool, [&](vk::CommandBuffer buffer) {
+		vk::BufferCopy copyRegion(0, 0, dataSize);
+		buffer.copyBuffer(source, dest, 1, &copyRegion);
 
-	vk::CommandBuffer commandBuffer = commandBuffers[0];
-
-	vk::CommandBufferBeginInfo beginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-	vk::Result commandBeginResult = commandBuffer.begin(&beginInfo);
-	if (commandBeginResult != vk::Result::eSuccess) {
-		s.vkDevice.freeCommandBuffers(pool, commandBuffers);
-		return commandBeginResult;
-	}
-
-	vk::BufferCopy copyRegion(0, 0, dataSize);
-	commandBuffer.copyBuffer(source, dest, 1, &copyRegion);
-	commandBuffer.end();
-
-	vk::SubmitInfo submitInfo(0, nullptr, nullptr, 1, &commandBuffer, 0, nullptr);
-
-	s.graphicsQueue.submit(submitInfo);
-	s.graphicsQueue.waitIdle();
-
-	s.vkDevice.freeCommandBuffers(pool, commandBuffers);
-
-	return vk::Result::eSuccess;
+		return vk::Result::eSuccess;
+	});
 }
 
 export
@@ -268,7 +278,14 @@ export struct GPUVertexBufferStage {
 		return result;
 	}
 };
-export struct GPUIndexedVertexBufferStage {
+
+export
+template <typename V>
+struct GPUIndexedVertexBufferStage {
+	GPUIndexedVertexBufferStage(const std::vector<V>& v) : vertices_(v) {}
+	
+	std::vector<V> vertices_;
+
 	using row_tag = RowType::RowWrapperTag;
 
 	template <typename WrappedReturnType>
@@ -279,7 +296,7 @@ export struct GPUIndexedVertexBufferStage {
 		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 		vk::CommandPool commandPool = boost::hana::at_key(r, BOOST_HANA_STRING("commandPool"));
 
-		auto vertexResult = bainangua::createGPUVertexBuffer(context.vmaAllocator, context, commandPool, bainangua::indexedStaticVertices);
+		auto vertexResult = bainangua::createGPUVertexBuffer(context.vmaAllocator, context, commandPool, vertices_);
 		if (!vertexResult.has_value()) {
 			return tl::make_unexpected<bng_errorobject>("GPUVertexBufferStage: could not create GPU vertex buffer");
 		}

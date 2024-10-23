@@ -60,6 +60,35 @@ export void withCommandBuffer(const VulkanContext& s, vk::CommandPool pool, std:
 	s.vkDevice.freeCommandBuffers(pool, buffers);
 }
 
+export auto submitCommand(const VulkanContext& s, vk::CommandPool pool, std::function<vk::Result(vk::CommandBuffer)> commands) -> vk::Result {
+	std::pmr::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
+
+	vk::CommandBuffer commandBuffer = commandBuffers[0];
+
+	vk::CommandBufferBeginInfo beginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+	vk::Result commandBeginResult = commandBuffer.begin(&beginInfo);
+	if (commandBeginResult != vk::Result::eSuccess) {
+		s.vkDevice.freeCommandBuffers(pool, commandBuffers);
+		return commandBeginResult;
+	}
+
+	auto wrappedResult = commands(commandBuffer);
+	if (wrappedResult != vk::Result::eSuccess) {
+		s.vkDevice.freeCommandBuffers(pool, commandBuffers);
+		return wrappedResult;
+	}
+
+	commandBuffer.end();
+
+	vk::SubmitInfo submitInfo(0, nullptr, nullptr, 1, &commandBuffer, 0, nullptr);
+
+	s.graphicsQueue.submit(submitInfo);
+	s.graphicsQueue.waitIdle();
+
+	s.vkDevice.freeCommandBuffers(pool, commandBuffers);
+
+	return vk::Result::eSuccess;
+}
 
 export struct SimpleGraphicsCommandPoolStage {
 	using row_tag = RowType::RowWrapperTag;

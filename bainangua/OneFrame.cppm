@@ -90,10 +90,10 @@ struct StandardMultiFrameLoop {
 	using row_tag = RowType::RowWrapperTag;
 
 	template <typename WrappedReturnType>
-	using return_type_transformer = tl::expected<int, std::pmr::string>;
+	using return_type_transformer = bng_expected<bool>;
 
 	template <typename RowFunction, typename Row>
-	constexpr tl::expected<int, std::pmr::string> wrapRowFunction(RowFunction f, Row r) {
+	constexpr bng_expected<bool> wrapRowFunction(RowFunction f, Row r) {
 		bainangua::VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 		std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
@@ -107,27 +107,27 @@ struct StandardMultiFrameLoop {
 
 			tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result> result =
 				bainangua::drawOneFrame(s, presenterptr, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandBuffer, vk::Framebuffer frameBuffer) {
-				auto newFields = boost::hana::make_map(
-					boost::hana::make_pair(BOOST_HANA_STRING("primaryCommandBuffer"), commandBuffer),
-					boost::hana::make_pair(BOOST_HANA_STRING("targetFrameBuffer"), frameBuffer),
-					boost::hana::make_pair(BOOST_HANA_STRING("viewportExtent"), presenterptr->swapChainExtent2D_),
-					boost::hana::make_pair(BOOST_HANA_STRING("multiFrameIndex"), multiFrameIndex)
-				);
-				auto rWithNewFields = boost::hana::fold_left(r, newFields, boost::hana::insert);
+					auto newFields = boost::hana::make_map(
+						boost::hana::make_pair(BOOST_HANA_STRING("primaryCommandBuffer"), commandBuffer),
+						boost::hana::make_pair(BOOST_HANA_STRING("targetFrameBuffer"), frameBuffer),
+						boost::hana::make_pair(BOOST_HANA_STRING("viewportExtent"), presenterptr->swapChainExtent2D_),
+						boost::hana::make_pair(BOOST_HANA_STRING("multiFrameIndex"), multiFrameIndex)
+					);
+					auto rWithNewFields = boost::hana::fold_left(r, newFields, boost::hana::insert);
 
-				auto drawResult = f.applyRow(rWithNewFields);
-				/*updateUniformBuffer(presenterptr->swapChainExtent2D_, uniformBuffers[multiFrameIndex]);
-				recordCommandBuffer(commandBuffer, frameBuffer, presenterptr->swapChainExtent2D_, pipeline, vertexBuffer, indexBuffer, descriptorSets[multiFrameIndex]);*/
-					})
+					auto drawResult = f.applyRow(rWithNewFields);
+					/*updateUniformBuffer(presenterptr->swapChainExtent2D_, uniformBuffers[multiFrameIndex]);
+					recordCommandBuffer(commandBuffer, frameBuffer, presenterptr->swapChainExtent2D_, pipeline, vertexBuffer, indexBuffer, descriptorSets[multiFrameIndex]);*/
+				})
 				.and_then([&](std::shared_ptr<bainangua::PresentationLayer> newPresenter) {
-				presenterptr = newPresenter;
+					presenterptr = newPresenter;
 
-				glfwPollEvents();
-				s.endOfFrame();
-				multiFrameIndex = (multiFrameIndex + 1) % bainangua::MultiFrameCount;
+					glfwPollEvents();
+					s.endOfFrame();
+					multiFrameIndex = (multiFrameIndex + 1) % bainangua::MultiFrameCount;
 
-				return tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result>(newPresenter);
-			});
+					return tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result>(newPresenter);
+				});
 			if (!result) break;
 			if (autoClose_.has_value() && --autoClose_.value() == 0) {
 				break;
@@ -136,7 +136,7 @@ struct StandardMultiFrameLoop {
 
 		s.vkDevice.waitIdle();
 
-		return 0;
+		return true;
 	}
 };
 
