@@ -43,11 +43,5 @@ namespace bainangua {
 		return tl::make_unexpected(x);
 	}
 
-	template <typename T>
-	auto formatVkResultError(std::string_view context, vk::Result result) -> bng_expected<T> {
-		bainangua::bng_errorobject errorMessage;
-		std::format_to(std::back_inserter(errorMessage), "{}: {}", context, vkResultToString(static_cast<VkResult>(result)));
-		return tl::make_unexpected(errorMessage);
-	}
-
+	auto formatVkResultError(std::string_view context, vk::Result result) -> tl::unexpected<bng_errorobject>;
 }
