@@ -12,13 +12,9 @@ module;
 #include "bainangua.hpp"
 #include "RowType.hpp"
 
-// we instantiate vk_result_to_string in this file
-#define VK_RESULT_TO_STRING_CONFIG_MAIN
 #include "vk_result_to_string.h"
 
 #include <array>
-#include <boost/asio.hpp>
-#include <boost/asio/co_spawn.hpp>
 #include <concepts>
 #include <coroutine>
 #include <chrono>

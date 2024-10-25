@@ -8,8 +8,8 @@ module;
 #include "RowType.hpp"
 #include "vk_result_to_string.h"
 
-#include <boost/asio.hpp>
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <ranges>
 #include <vector>
@@ -29,10 +29,13 @@ std::pmr::vector<char> readFile(std::filesystem::path filePath)
 
 	std::pmr::vector<char> dataBuffer(fileSize);
 
-	boost::asio::io_context io;
-	boost::asio::stream_file fileHandle(io, filePath.string(), boost::asio::file_base::flags::read_only);
-	size_t completedSize = boost::asio::read(fileHandle, boost::asio::buffer(dataBuffer.data(), fileSize));
-	assert(completedSize == fileSize);
+	std::fstream fs;
+	fs.open(filePath, std::ios_base::binary | std::ios_base::in);
+	fs.read(dataBuffer.data(), fileSize);
+	std::streamsize readCount = fs.gcount();
+	fs.close();
+
+	assert(readCount == fileSize);
 
 	return dataBuffer;
 }

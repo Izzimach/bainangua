@@ -7,8 +7,8 @@ find_package(Vulkan REQUIRED)
 find_package(VulkanMemoryAllocator REQUIRED)
 find_package(GTest REQUIRED)
 find_package(Boost REQUIRED COMPONENTS hana)
-find_package(boost_asio REQUIRED)
 find_package(glm REQUIRED)
+
 
 include(FetchContent)
 
@@ -19,6 +19,16 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(qlibsreflect)
+
+
+FetchContent_Declare(
+    libcoro
+    GIT_REPOSITORY https://github.com/jbaldwin/libcoro.git
+    GIT_TAG        v0.11.1
+)
+FetchContent_MakeAvailable(libcoro)
+
+
 
 #
 # basic library, used by the main executable and test executable
@@ -50,7 +60,7 @@ endif()
 target_link_libraries(bainangua PUBLIC glfw)
 target_link_libraries(bainangua PUBLIC immer)
 target_link_libraries(bainangua PUBLIC Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator)
-target_link_libraries(bainangua INTERFACE Boost::hana Boost::asio)
+target_link_libraries(bainangua INTERFACE Boost::hana)
 
 #
 # experimental stuff
@@ -64,7 +74,7 @@ target_include_directories(experimental_lib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR
 target_link_libraries(experimental_lib PUBLIC glfw)
 target_link_libraries(experimental_lib PUBLIC immer)
 target_link_libraries(experimental_lib PUBLIC Vulkan::Vulkan)
-target_link_libraries(experimental_lib INTERFACE Boost::hana Boost::asio)
+target_link_libraries(experimental_lib INTERFACE Boost::hana)
 
 #
 # shader compilation - shaders get compiled and put into assets/shaders in the build tree
@@ -148,6 +158,7 @@ endif()
 target_link_libraries(white_pumpkin PRIVATE Vulkan::Vulkan)
 target_link_libraries(white_pumpkin PRIVATE bainangua)
 target_link_libraries(white_pumpkin PRIVATE experimental_lib)
+target_link_libraries(white_pumpkin PRIVATE libcoro)
 
 add_dependencies(white_pumpkin shaders)
 add_dependencies(white_pumpkin textures)

@@ -1,13 +1,12 @@
 {
   "dependencies": [
     "benchmark",
-    "boost-asio",
     "boost-hana",
     "glfw3",
+    "glm",
     "gtest",
     "immer",
     "vulkan",
-    "vulkan-memory-allocator",
-    "glm"
+    "vulkan-memory-allocator"
   ]
 }
