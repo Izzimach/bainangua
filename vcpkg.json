@@ -5,6 +5,7 @@
     "glfw3",
     "glm",
     "gtest",
+    "gtl",
     "immer",
     "vulkan",
     "vulkan-memory-allocator"
