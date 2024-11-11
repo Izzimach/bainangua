@@ -18,6 +18,7 @@ Functional Programming
 - Use Haskell-style "bracket" functions although under the hood it's probably still RAII :stuck_out_tongue_winking_eye:
 - Use (abuse?) the pipe operator | to compose multiple small functions using expression templates.
 - Use row polymorphic types to allow more freedom and flexibility in function composition order.
+- Vulkan functions typically return a `VkResult` or `vk::Result` to indicate success. Where possible we convert these into `expected` values and use the related chain operators `.and_then()` and `.or_else`
 
 ---------
 
