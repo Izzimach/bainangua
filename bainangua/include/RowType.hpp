@@ -177,7 +177,7 @@ namespace RowType {
 
 		template <typename RowFunction, typename Row>
 		constexpr std::string wrapRowFunction(RowFunction f, Row r) {
-			[[maybediscard]] f.applyRow(r);
+			f.applyRow(r);
 			return std::string("argh");
 		}
 	};
