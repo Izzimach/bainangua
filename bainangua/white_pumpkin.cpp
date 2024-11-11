@@ -6,6 +6,7 @@
 #include "RowType.hpp"
 #include "tanuki.hpp"
 #include "white_pumpkin.hpp"
+//#include "task_X.hpp"
 
 #ifdef NDEBUG
 #include <windows.h>
@@ -16,6 +17,11 @@
 #include <filesystem>
 #include <format>
 #include <iostream>
+#include <boost/hana/map.hpp>
+#include <boost/hana/hash.hpp>
+#include <boost/hana/define_struct.hpp>
+#include <coro/coro.hpp>
+#include <map>
 #include <memory_resource>
 #include <vector>
 
@@ -28,6 +34,7 @@ import VertexBuffer;
 import UniformBuffer;
 import DescriptorSets;
 import TextureImage;
+import ResourceLoader;
 
 void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, vk::Extent2D swapChainExtent, const bainangua::PipelineBundle &pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer, vk::DescriptorSet uboDescriptorSet) {
 	vk::CommandBufferBeginInfo beginInfo({}, {});
@@ -72,10 +79,6 @@ void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImag
 
 	buffer.end();
 }
-
-
-
-
 
 
 struct DrawMVPIndexedGeometry {
@@ -182,6 +185,13 @@ struct InvokeRenderLoop {
 
 
 
+
+
+template <typename Key, typename Resource>
+using TestResourceStore = bainangua::SingleResourceKey<Key, Resource>;
+
+
+
 #ifdef NDEBUG
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 #else
@@ -195,8 +205,24 @@ int main()
 	std::pmr::polymorphic_allocator<> default_pmr_allocator(&default_pmr_resource);
 	std::pmr::set_default_resource(&default_pmr_resource);
 
+	auto coro1 = []() -> coro::task<int> {
+		co_return 3;
+	};
 
-	bainangua::bng_expected<bool> programResult = bainangua::createVulkanContext(
+	auto coro2 = [&]() -> coro::task<void> {
+		auto c = coro1();
+		int r = co_await c;
+		std::cout << std::format("co_await result= {}\n", r);
+		/*int r2 = co_await c;
+		std::cout << std::format("co_await result2 = {}\n", r2);
+		int r3 = co_await c;
+		std::cout << std::format("co_await result3 = {}\n", r3);*/
+	};
+
+	coro::sync_wait(coro2());
+
+	bainangua::bng_expected<bool> programResult =
+	bainangua::createVulkanContext(
 		bainangua::VulkanContextConfig{
 			.AppName = "My Test App",
 			.requiredExtensions = {
@@ -209,7 +235,7 @@ int main()
 			.useValidation = true,
 #endif
 			.innerCode = [=](bainangua::VulkanContext& s) -> bainangua::bng_expected<bool> {
-				auto stageRow = boost::hana::make_map(boost::hana::make_pair(BOOST_HANA_STRING("context"), s));
+				/*auto stageRow = boost::hana::make_map(boost::hana::make_pair(BOOST_HANA_STRING("context"), s));
 				auto stages =
 					bainangua::PresentationLayerStage()
 					| bainangua::TexPipelineStage(SHADER_DIR)
@@ -227,8 +253,96 @@ int main()
 					| UpdateUniformBuffer()
 					| bainangua::BasicRendering()
 					| DrawMVPIndexedGeometry();
-				
-				return stages.applyRow(stageRow);
+
+				return stages.applyRow(stageRow);*/
+
+				auto loaderDirectory = boost::hana::make_map(
+					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<std::string, int>>,[]<typename Resources, typename Storage>(coro::thread_pool& pool, bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<std::string,int> key) -> coro::task<bainangua::bng_expected<int>> {
+						co_await pool.schedule();
+
+						std::cout << "int loader running\n";
+
+						auto k1 = TestResourceStore<int, float>{ 1 };
+						auto k2 = TestResourceStore<int, float>{ 1 };
+
+						const auto results = co_await coro::when_all(loader.loadResource(k1), loader.loadResource(k2));
+						auto result1 = std::get<0>(results).return_value();
+						auto result2 = std::get<1>(results).return_value();
+						//auto result1 = co_await loader.loadResource(k1);
+						//auto result2 = co_await loader.loadResource(k2);
+
+						co_return (result1.and_then([&](auto xval) {
+							return result2.transform([&](auto yval) {
+								return static_cast<int>(xval+yval);
+								});
+							})
+						);
+					}),
+					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<int,float>>,[]<typename Resources, typename Storage>(coro::thread_pool& pool, bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<int,float> key) -> coro::task<bainangua::bng_expected<float>> {
+						co_await pool.schedule();
+						std::cout << "float loader running\n";
+						co_return bainangua::bng_expected<float>(3.0f + static_cast<float>(key.key));
+					})
+				);
+
+				auto loaderStorage = boost::hana::fold_left(
+					loaderDirectory,
+					boost::hana::make_map(),
+					[](auto accumulator, auto v) {
+						auto HanaKey = boost::hana::first(v);
+						using KeyType = typename decltype(HanaKey)::type;
+						using ResourceType = typename decltype(HanaKey)::type::resource_type;
+
+						// we'd like to use unique_ptr here but hana forces a copy somewhere internally
+						std::unordered_map<KeyType, std::shared_ptr<bainangua::SingleResourceStore<ResourceType>>> storage;
+
+						return boost::hana::insert(accumulator, boost::hana::make_pair(HanaKey, storage));
+					}
+				);
+
+				bainangua::bng_expected<bool> result{ true };
+
+				try {
+					std::shared_ptr<bainangua::ResourceLoader<decltype(loaderDirectory), decltype(loaderStorage)>> loader(std::make_shared<bainangua::ResourceLoader<decltype(loaderDirectory), decltype(loaderStorage)>>(s, loaderDirectory));
+					auto k = TestResourceStore<std::string, int>{ "argh" };
+					coro::task<bainangua::bng_expected<int>> loading1 = loader->loadResource(k);
+					bainangua::bng_expected<int> result1 = coro::sync_wait(loading1);
+					if (result1.has_value()) {
+						std::cout << "storage result: " << result1.value() << "\n";
+					}
+					else {
+						std::cout << "result error: " << result1.error() << "\n";
+					}
+
+					// this should do cleanup
+					/*auto result2 = coro::sync_wait(loading1);
+					if (result2.has_value()) {
+						std::cout << "int result2: " << std::get<1>(result2.value()) << "\n";
+					}
+					else {
+						std::cout << "result2 error: " << result2.error() << "\n";
+					}*/
+					//int val = loading2();
+					//std::cout << "gentask yield result: " << val << "\n";
+				}
+				catch (vk::SystemError& err)
+				{
+					bainangua::bng_errorobject errorString;
+					std::format_to(std::back_inserter(errorString), "vk::SystemError: {}", err.what());
+					result = tl::make_unexpected(errorString);
+				}
+				catch (std::exception& err)
+				{
+					bainangua::bng_errorobject errorString;
+					std::format_to(std::back_inserter(errorString), "std::exception: {}", err.what());
+					result = tl::make_unexpected(errorString);
+				}
+				catch (...)
+				{
+					bainangua::bng_errorobject errorString("unknown error");
+					result = tl::make_unexpected(errorString);
+				}
+				return result;
 			}
 		}
 	);

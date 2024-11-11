@@ -9,6 +9,8 @@ find_package(GTest REQUIRED)
 find_package(Boost REQUIRED COMPONENTS hana)
 find_package(glm REQUIRED)
 
+# vcpkg version of gtl doesn't use the normal CMake packaging...
+find_path(GTL_INCLUDE_DIRS "gtl/adv_utils.hpp")
 
 include(FetchContent)
 
@@ -17,17 +19,16 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/qlibs/reflect
   GIT_TAG v1.2.3
 )
-
 FetchContent_MakeAvailable(qlibsreflect)
 
-
+# Fetch the project and make it available for use.
+include(FetchContent)
 FetchContent_Declare(
     libcoro
     GIT_REPOSITORY https://github.com/jbaldwin/libcoro.git
-    GIT_TAG        v0.11.1
+    GIT_TAG        v0.12.1
 )
 FetchContent_MakeAvailable(libcoro)
-
 
 
 #
@@ -43,12 +44,16 @@ target_sources(bainangua
     PUBLIC
     FILE_SET bainangua_modules 
     TYPE CXX_MODULES 
-    FILES "OneFrame.cppm" "VulkanContext.cppm" "PresentationLayer.cppm" "Pipeline.cppm" "Commands.cppm" "VertexBuffer.cppm" "UniformBuffer.cppm" "DescriptorSets.cppm" "TextureImage.cppm")
+    FILES "OneFrame.cppm" "VulkanContext.cppm" "PresentationLayer.cppm" "Pipeline.cppm" "Commands.cppm" "VertexBuffer.cppm" "UniformBuffer.cppm" "DescriptorSets.cppm" "TextureImage.cppm" "ResourceLoader.cppm")
+
 
 target_include_directories(bainangua PUBLIC
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+target_include_directories(bainangua PRIVATE
     ${qlibsreflect_SOURCE_DIR}
+    ${GTL_INCLUDE_DIRS}
     )
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
@@ -61,6 +66,7 @@ target_link_libraries(bainangua PUBLIC glfw)
 target_link_libraries(bainangua PUBLIC immer)
 target_link_libraries(bainangua PUBLIC Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator)
 target_link_libraries(bainangua INTERFACE Boost::hana)
+target_link_libraries(bainangua PUBLIC libcoro)
 
 #
 # experimental stuff
@@ -158,7 +164,6 @@ endif()
 target_link_libraries(white_pumpkin PRIVATE Vulkan::Vulkan)
 target_link_libraries(white_pumpkin PRIVATE bainangua)
 target_link_libraries(white_pumpkin PRIVATE experimental_lib)
-target_link_libraries(white_pumpkin PRIVATE libcoro)
 
 add_dependencies(white_pumpkin shaders)
 add_dependencies(white_pumpkin textures)
