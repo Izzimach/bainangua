@@ -315,15 +315,7 @@ int main()
 					}
 
 					// this should do cleanup
-					/*auto result2 = coro::sync_wait(loading1);
-					if (result2.has_value()) {
-						std::cout << "int result2: " << std::get<1>(result2.value()) << "\n";
-					}
-					else {
-						std::cout << "result2 error: " << result2.error() << "\n";
-					}*/
-					//int val = loading2();
-					//std::cout << "gentask yield result: " << val << "\n";
+					coro::sync_wait(loader->unloadResource(k));
 				}
 				catch (vk::SystemError& err)
 				{
