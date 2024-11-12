@@ -1,6 +1,7 @@
 
-#include "gtest/gtest.h"
 #include "bainangua.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <boost/hana/map.hpp>
 #include <boost/hana/string.hpp>
@@ -13,18 +14,18 @@ using namespace RowType;
 
 namespace {
 
-	TEST(RowType, BasicTest)
+	TEST_CASE("Basic RowType Tests", "[Basic][RowType]")
 	{
 		auto simpleRow = boost::hana::make_map(
 			boost::hana::make_pair(BOOST_HANA_STRING("name"), std::string("argh")),
 			boost::hana::make_pair(boost::hana::int_c<4>, 3.0f)
 		);
 
-		EXPECT_EQ(getRowField<"name"_field>(simpleRow), std::string("argh"));
-		EXPECT_EQ(boost::hana::at_key(simpleRow, boost::hana::int_c<4>), 3.0f);
+		REQUIRE(getRowField<"name"_field>(simpleRow) == std::string("argh"));
+		REQUIRE(boost::hana::at_key(simpleRow, boost::hana::int_c<4>) == 3.0f);
 	}
 
-	TEST(RowType, Wrappers)
+	TEST_CASE("RowType Wrappers", "[Basic][RowType]")
 	{
 		auto singleRow = boost::hana::make_map(
 			boost::hana::make_pair(BOOST_HANA_STRING("a"), std::string("blargh"))
@@ -40,8 +41,8 @@ namespace {
 			| AddFieldWrapper()
 			| PullFromMapFunction();
 
-		EXPECT_EQ(rowFn.applyRow(singleRow), 9);
-		EXPECT_EQ(rowFn.applyRow(doubleRow), 4);
+		REQUIRE(rowFn.applyRow(singleRow) == 9);
+		REQUIRE(rowFn.applyRow(doubleRow) == 4);
 
 		auto onlyStringFn =
 			OnlyReturnStringWrapper()
@@ -50,8 +51,8 @@ namespace {
 			| AddFieldWrapper()
 			| PullFromMapFunction();
 
-		EXPECT_EQ(onlyStringFn.applyRow(singleRow), std::string("argh"));
-		EXPECT_EQ(onlyStringFn.applyRow(doubleRow), std::string("argh"));
+		REQUIRE(onlyStringFn.applyRow(singleRow) == std::string("argh"));
+		REQUIRE(onlyStringFn.applyRow(doubleRow) == std::string("argh"));
 
 	}
 }

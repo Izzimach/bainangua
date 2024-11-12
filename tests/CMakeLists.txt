@@ -5,9 +5,10 @@
 find_package(immer REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(Vulkan REQUIRED)
-find_package(GTest REQUIRED)
 find_package(Boost REQUIRED)
 find_package(benchmark REQUIRED)
+find_package(Catch2 3 REQUIRED)
+
 
 add_executable(nangua_test "nangua_tests.cpp" "RowTypeTests.cpp")
 target_compile_features(nangua_test PUBLIC cxx_std_20)
@@ -24,12 +25,14 @@ target_include_directories(nangua_test PRIVATE
 
 target_link_libraries(nangua_test PRIVATE glfw)
 target_link_libraries(nangua_test PRIVATE Vulkan::Vulkan)
-target_link_libraries(nangua_test PRIVATE GTest::gtest_main)
+target_link_libraries(nangua_test PRIVATE Catch2::Catch2WithMain)
 target_link_libraries(nangua_test PRIVATE bainangua)
 
 add_dependencies(nangua_test shaders)
 
-gtest_discover_tests(nangua_test)
+include (CTest)
+include(Catch)
+catch_discover_tests(nangua_test)
 
 #
 # benchmark executable
@@ -51,7 +54,6 @@ target_include_directories(nangua_benchmark PRIVATE
 target_link_libraries(nangua_benchmark PUBLIC immer)
 target_link_libraries(nangua_benchmark PRIVATE glfw)
 target_link_libraries(nangua_benchmark PRIVATE Vulkan::Vulkan)
-target_link_libraries(nangua_benchmark PRIVATE GTest::gtest_main)
 target_link_libraries(nangua_benchmark PRIVATE bainangua)
 target_link_libraries(nangua_benchmark PRIVATE benchmark::benchmark)
 target_link_libraries(nangua_benchmark INTERFACE Boost::hana)

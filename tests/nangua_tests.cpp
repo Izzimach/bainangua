@@ -1,8 +1,9 @@
 
 #include "bainangua.hpp"
-#include "gtest/gtest.h"
 #include "nangua_tests.hpp"
 #include "RowType.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <expected.hpp>
 #include <filesystem>
@@ -73,7 +74,7 @@ struct DrawNoVertexGeometry {
 	constexpr void applyRow(Row r) {
 		vk::CommandBuffer buffer = boost::hana::at_key(r, BOOST_HANA_STRING("primaryCommandBuffer"));
 		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
-		size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
+		//size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
 
 		buffer.draw(3, 1, 0, 0);
 	}
@@ -88,7 +89,7 @@ struct DrawVertexGeometry {
 		vk::CommandBuffer buffer = boost::hana::at_key(r, BOOST_HANA_STRING("primaryCommandBuffer"));
 		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
 		auto [vertexBuffer, bufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("vertexBuffer"));
-		size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
+		//size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
 
 		vk::Buffer vertexBuffers[] = { vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
@@ -110,7 +111,7 @@ struct DrawIndexedVertexGeometry {
 		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
 		auto [vertexBuffer, bufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("indexedVertexBuffer"));
 		auto [indexBuffer, indexBufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("indexBuffer"));
-		size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
+		//size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
 
 		vk::Buffer vertexBuffers[] = { vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
@@ -172,26 +173,27 @@ struct UpdateUniformBuffer {
 
 
 
-TEST(VulkanContext, BasicTest)
+TEST_CASE("VulkanContext", "[Basic]")
 {
-	EXPECT_NO_THROW(
-		wrapRenderLoopRow("Basic Test", NoRenderLoop())
+	REQUIRE(
+		wrapRenderLoopRow("Basic Test", NoRenderLoop()) == bng_expected<bool>(true)
 	);
 }
 
-TEST(PresentationLayer, BasicTest)
+TEST_CASE("PresentationLayer", "[Basic]")
 {
-	EXPECT_NO_THROW(
+	REQUIRE(
 		wrapRenderLoopRow(
 			"PresentationLayer Pipeline Test App", 
 			PresentationLayerStage() | NoRenderLoop()
 		)
+		== bng_expected<bool>(true)
 	);
 }
 
-TEST(OneFrame, BasicTest)
+TEST_CASE("OneFrame", "[Basic][Rendering]")
 {
-	EXPECT_EQ(
+	REQUIRE(
 		wrapRenderLoopRow(
 			"OneFrame Pipeline Test App",
 			PresentationLayerStage()
@@ -201,14 +203,14 @@ TEST(OneFrame, BasicTest)
 			| StandardMultiFrameLoop(10)
 			| BasicRendering()
 			| DrawNoVertexGeometry()
-		),
-		(bng_expected<bool>(true))
+		)
+		== (bng_expected<bool>(true))
 	);
 }
 
-TEST(OneFrame, VertexBuffer)
+TEST_CASE("VertexBuffer","[Rendering]")
 {
-	EXPECT_EQ(
+	REQUIRE(
 		wrapRenderLoopRow(
 			"VertexBuffer Pipeline Test App",
 			PresentationLayerStage()
@@ -219,14 +221,14 @@ TEST(OneFrame, VertexBuffer)
 			| StandardMultiFrameLoop(10)
 			| BasicRendering()
 			| DrawVertexGeometry()
-		),
-		(bng_expected<bool>(true))
+		)
+		== (bng_expected<bool>(true))
 	);
 }
 
-TEST(OneFrame, IndexBuffer)
+TEST_CASE("IndexBuffer", "[Rendering]")
 {
-	EXPECT_EQ(
+	REQUIRE(
 		wrapRenderLoopRow(
 			"IndexBuffer Pipeline Test App",
 			PresentationLayerStage()
@@ -238,14 +240,14 @@ TEST(OneFrame, IndexBuffer)
 			| StandardMultiFrameLoop(10)
 			| BasicRendering()
 			| DrawIndexedVertexGeometry()
-		),
-		(bng_expected<bool>(true))
+		)
+		== (bng_expected<bool>(true))
 	);
 }
 
-TEST(OneFrame, UBO)
+TEST_CASE("Uniform Buffer Object", "[Rendering]")
 {
-	EXPECT_EQ(
+	REQUIRE(
 		wrapRenderLoopRow(
 			"IndexBuffer Pipeline Test App",
 			bainangua::PresentationLayerStage()
@@ -263,14 +265,14 @@ TEST(OneFrame, UBO)
 			| UpdateUniformBuffer()
 			| bainangua::BasicRendering()
 			| DrawMVPIndexedGeometry()
-		),
-		true
+		)
+		== bng_expected<bool>(true)
 	);
 }
 
-TEST(OneFrame, Textured)
+TEST_CASE("Textures", "[Rendering]")
 {
-	EXPECT_EQ(
+	REQUIRE(
 		wrapRenderLoopRow(
 			"Textured Shader Test App",
 			bainangua::PresentationLayerStage()
@@ -289,8 +291,8 @@ TEST(OneFrame, Textured)
 			| UpdateUniformBuffer()
 			| bainangua::BasicRendering()
 			| DrawMVPIndexedGeometry()
-			),
-		true
+		)
+		== true
 	);
 }
 

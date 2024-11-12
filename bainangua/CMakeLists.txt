@@ -1,16 +1,19 @@
-﻿# CMakeList.txt : CMake project for GLFW_X, include source and define
-# project specific logic here.
+﻿# CMake file for make bainangua library and experimental executable.
+
+# cmake packages - usually via vcpkg
 
 find_package(immer REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(Vulkan REQUIRED)
 find_package(VulkanMemoryAllocator REQUIRED)
-find_package(GTest REQUIRED)
 find_package(Boost REQUIRED COMPONENTS hana)
 find_package(glm REQUIRED)
 
 # vcpkg version of gtl doesn't use the normal CMake packaging...
 find_path(GTL_INCLUDE_DIRS "gtl/adv_utils.hpp")
+
+
+# some dependencies are acquired via FetchContent
 
 include(FetchContent)
 
@@ -21,8 +24,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(qlibsreflect)
 
-# Fetch the project and make it available for use.
-include(FetchContent)
 FetchContent_Declare(
     libcoro
     GIT_REPOSITORY https://github.com/jbaldwin/libcoro.git
@@ -131,7 +132,7 @@ foreach (FILE ${TEXTURE_FILES})
 endforeach (FILE)
 
 #
-# main executable
+# experimental executable
 #
 
 add_executable (white_pumpkin "white_pumpkin.cpp")

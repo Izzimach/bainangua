@@ -4,10 +4,10 @@
     "boost-hana",
     "glfw3",
     "glm",
-    "gtest",
     "gtl",
     "immer",
     "vulkan",
-    "vulkan-memory-allocator"
+    "vulkan-memory-allocator",
+    "catch2"
   ]
 }
