@@ -212,10 +212,10 @@ public:
         // this is a coroutine, no lambda capture for me
         auto loadAndGo = [](ResourceLoader* self, LookupKey key, std::shared_ptr<SingleResourceStore<LookupKey::resource_type>> storePtr) -> coro::task<void> {
             auto &loader = boost::hana::at_key(self->loaders_, boost::hana::type_c<LookupKey>);
+            auto loadedValue = co_await loader(*(self->tp), *self, key);
+
             coro::scoped_lock resourceLock = co_await storePtr->resourceMutex_.lock();
-
-            storePtr->resourceValue_ = co_await loader(*(self->tp), *self, key);
-
+            storePtr->resourceValue_ = loadedValue;
             // signal the event to wake up waiters. We do this even if the loader failed, so that waiters
             // will see the error
             storePtr->loadedEvent_.set();
@@ -244,7 +244,8 @@ public:
                     std::cout << "unloading\n";
                     // modify the resource so that it appears unloaded and start the unload process
 
-                    // note that this reset() will spinlock until all event waiters have been handled
+                    // Note that this reset() will spinlock until all event waiters have been handled/cleared.
+                    // However there shouldn't be any waiters since the refCount is zero
                     resourceStore->loadedEvent_.reset();
 
                     resourceStore->resourceValue_ = tl::make_unexpected(std::pmr::string("resource not loaded"));
