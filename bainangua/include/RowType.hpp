@@ -146,16 +146,18 @@ namespace RowType {
 		constexpr double applyRow(Row) { return 0.0; }
 	};
 
+	template <typename V>
 	struct PullFromMapFunction {
 		using row_tag = RowFunctionTag;
-		using return_type = int;
+		using return_type = V;
 
 		template <typename Row>
-		constexpr int applyRow(Row r) {
+		constexpr V applyRow(Row r) {
 			static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("a"), std::string>, "Row must have field named 'a'");
 			return boost::hana::at_key(r, boost::hana::int_c<4>);
 		}
 	};
+
 
 	struct IdRowWrapper {
 		using row_tag = RowWrapperTag;
@@ -200,7 +202,7 @@ namespace RowType {
 
 		template <typename RowFunction, typename Row>
 		constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-			auto r2 = boost::hana::insert(r, boost::hana::make_pair(boost::hana::int_c<4>, 8));
+			auto r2 = boost::hana::insert(r, boost::hana::make_pair(boost::hana::int_c<4>, 8.0f));
 			return f.applyRow(r2);
 		}
 	};
