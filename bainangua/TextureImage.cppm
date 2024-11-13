@@ -223,7 +223,7 @@ export auto createTextureSampler(const VulkanContext& s) -> bng_expected<vk::Sam
 	return sampler;
 }
 
-export auto linkImageToDescriptorSets(const VulkanContext& s, ImageBundle image, vk::Sampler sampler, std::pmr::vector<vk::DescriptorSet> descriptors) -> bng_expected<void> {
+export auto linkImageToDescriptorSets(const VulkanContext& s, ImageBundle image, vk::Sampler sampler, std::vector<vk::DescriptorSet> descriptors) -> bng_expected<void> {
 	for (auto descriptor : descriptors) {
 		vk::DescriptorImageInfo imageInfo(sampler, image.imageView, vk::ImageLayout::eShaderReadOnlyOptimal);
 		vk::WriteDescriptorSet descriptorWrite(descriptor, 1, 0, 1, vk::DescriptorType::eCombinedImageSampler, &imageInfo, nullptr, nullptr);
@@ -264,7 +264,7 @@ export struct LinkImageToDescriptorsStage {
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
 		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
-		std::pmr::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
+		std::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
 		const ImageBundle image = boost::hana::at_key(r, BOOST_HANA_STRING("textureImage"));
 		vk::Sampler sampler = boost::hana::at_key(r, BOOST_HANA_STRING("imageSampler"));
 

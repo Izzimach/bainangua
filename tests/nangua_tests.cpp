@@ -27,10 +27,10 @@ std::filesystem::path ShaderPath = SHADER_DIR;
 
 struct NoRenderLoop {
 	using row_tag = RowType::RowFunctionTag;
-	using return_type = tl::expected<int, std::pmr::string>;
+	using return_type = tl::expected<int, std::string>;
 
 	template<typename Row>
-	constexpr tl::expected<int, std::pmr::string> applyRow(Row r) {
+	constexpr tl::expected<int, std::string> applyRow(Row r) {
 		VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 		s.endOfFrame();
 		return 0;
@@ -136,7 +136,7 @@ struct DrawMVPIndexedGeometry {
 		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
 		auto [vertexBuffer, bufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("indexedVertexBuffer"));
 		auto [indexBuffer, indexBufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("indexBuffer"));
-		std::pmr::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
+		std::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
 		size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
 
 		vk::Buffer vertexBuffers[] = { vertexBuffer };
@@ -159,7 +159,7 @@ struct UpdateUniformBuffer {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		std::pmr::vector<bainangua::UniformBufferBundle> uniformBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("uniformBuffers"));
+		std::vector<bainangua::UniformBufferBundle> uniformBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("uniformBuffers"));
 		size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
 		vk::Extent2D viewportExtent = boost::hana::at_key(r, BOOST_HANA_STRING("viewportExtent"));
 

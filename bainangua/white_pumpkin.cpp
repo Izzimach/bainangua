@@ -6,7 +6,6 @@
 #include "RowType.hpp"
 #include "tanuki.hpp"
 #include "white_pumpkin.hpp"
-//#include "task_X.hpp"
 
 #ifdef NDEBUG
 #include <windows.h>
@@ -22,7 +21,6 @@
 #include <boost/hana/define_struct.hpp>
 #include <coro/coro.hpp>
 #include <map>
-#include <memory_resource>
 #include <vector>
 
 import Commands;
@@ -91,7 +89,7 @@ struct DrawMVPIndexedGeometry {
 		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
 		auto [vertexBuffer, bufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("indexedVertexBuffer"));
 		auto [indexBuffer, indexBufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("indexBuffer"));
-		std::pmr::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
+		std::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
 		size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
 
 		vk::Buffer vertexBuffers[] = { vertexBuffer };
@@ -114,7 +112,7 @@ struct UpdateUniformBuffer {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		std::pmr::vector<bainangua::UniformBufferBundle> uniformBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("uniformBuffers"));
+		std::vector<bainangua::UniformBufferBundle> uniformBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("uniformBuffers"));
 		size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
 		vk::Extent2D viewportExtent = boost::hana::at_key(r, BOOST_HANA_STRING("viewportExtent"));
 
@@ -136,14 +134,14 @@ auto renderLoop (Row r) -> bainangua::bng_expected<bool> {
 	bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
 
 	vk::CommandPool commandPool = boost::hana::at_key(r, BOOST_HANA_STRING("commandPool"));
-	std::pmr::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("commandBuffers"));
+	std::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("commandBuffers"));
 
 	auto [vertexBuffer, bufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("vertexBuffer"));
 	auto [indexBuffer, indexBufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("indexBuffer"));
 
 	//vk::DescriptorPool descriptorPool = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorPool"));
-	std::pmr::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
-	std::pmr::vector<bainangua::UniformBufferBundle> uniformBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("uniformBuffers"));
+	std::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
+	std::vector<bainangua::UniformBufferBundle> uniformBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("uniformBuffers"));
 
 
 	size_t multiFrameIndex = 0;
@@ -198,13 +196,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 int main()
 #endif
 {
-	// setup a pool arena for memory allocation.
-	// Many of the vulkan-hpp calls use the default allocator so we have to call set_default_resource here.
-	//
-	std::pmr::synchronized_pool_resource default_pmr_resource;
-	std::pmr::polymorphic_allocator<> default_pmr_allocator(&default_pmr_resource);
-	std::pmr::set_default_resource(&default_pmr_resource);
-
 	auto coro1 = []() -> coro::task<int> {
 		co_return 3;
 	};

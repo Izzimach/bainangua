@@ -18,7 +18,7 @@ void RowType::testRowTypes() {
 		| AddOneRowWrapper()
 		| IdRowWrapper()
 		| AddFieldWrapper()
-		| PullFromMapFunction();
+		| PullFromMapFunction<float>();
 	auto val = rowFn.applyRow(singleRow);
 
 	std::cout << std::format("{}\n", val);

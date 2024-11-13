@@ -23,11 +23,11 @@ import DescriptorSets;
 
 namespace bainangua {
 
-std::pmr::vector<char> readFile(std::filesystem::path filePath)
+std::vector<char> readFile(std::filesystem::path filePath)
 {
 	size_t fileSize = std::filesystem::file_size(filePath);
 
-	std::pmr::vector<char> dataBuffer(fileSize);
+	std::vector<char> dataBuffer(fileSize);
 
 	std::fstream fs;
 	fs.open(filePath, std::ios_base::binary | std::ios_base::in);
@@ -40,7 +40,7 @@ std::pmr::vector<char> readFile(std::filesystem::path filePath)
 	return dataBuffer;
 }
 
-vk::ShaderModule createShaderModule(vk::Device device, const std::pmr::vector<char>& shaderBytes)
+vk::ShaderModule createShaderModule(vk::Device device, const std::vector<char>& shaderBytes)
 {
 	vk::ShaderModuleCreateInfo createInfo(
 		vk::ShaderModuleCreateFlags(),
@@ -88,7 +88,7 @@ struct CreateShaderModule {
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
 		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 
-		std::pmr::vector<char> shaderCode = readFile(shaderFile);
+		std::vector<char> shaderCode = readFile(shaderFile);
 		vk::ShaderModule shaderModule = createShaderModule(device, shaderCode);
 		
 		auto rWithShader = boost::hana::insert(r,boost::hana::make_pair(ShaderName, shaderModule));
@@ -478,7 +478,7 @@ struct NoVertexPipelineStage {
 		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 		std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 
-		tl::expected<bainangua::PipelineBundle, std::pmr::string> pipelineResult(bainangua::createNoVertexPipeline(presenterptr, (shaderPath_ / "Basic.vert_spv"), (shaderPath_ / "Basic.frag_spv")));
+		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createNoVertexPipeline(presenterptr, (shaderPath_ / "Basic.vert_spv"), (shaderPath_ / "Basic.frag_spv")));
 		if (!pipelineResult.has_value()) {
 			return tl::make_unexpected(pipelineResult.error());
 		}
@@ -532,7 +532,7 @@ struct VTVertexPipelineStage {
 		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 		std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 
-		tl::expected<bainangua::PipelineBundle, std::pmr::string> pipelineResult(bainangua::createVTVertexPipeline(presenterptr, (shaderPath_ / "PosColor.vert_spv"), (shaderPath_ / "PosColor.frag_spv")));
+		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createVTVertexPipeline(presenterptr, (shaderPath_ / "PosColor.vert_spv"), (shaderPath_ / "PosColor.frag_spv")));
 		if (!pipelineResult.has_value()) {
 			return tl::make_unexpected(pipelineResult.error());
 		}
@@ -601,7 +601,7 @@ struct MVPPipelineStage {
 		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 		std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 
-		tl::expected<bainangua::PipelineBundle, std::pmr::string> pipelineResult(bainangua::createMVPVertexPipeline(presenterptr, (shaderPath_ / "PosColorMVP.vert_spv"), (shaderPath_ / "PosColor.frag_spv")));
+		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createMVPVertexPipeline(presenterptr, (shaderPath_ / "PosColorMVP.vert_spv"), (shaderPath_ / "PosColor.frag_spv")));
 		if (!pipelineResult.has_value()) {
 			return tl::make_unexpected(pipelineResult.error());
 		}
@@ -655,7 +655,7 @@ struct UBOPipelineStage {
 		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 		std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 
-		tl::expected<bainangua::PipelineBundle, std::pmr::string> pipelineResult(bainangua::createUBOVertexPipeline(presenterptr, (shaderPath_ / "PosColorMVP.vert_spv"), (shaderPath_ / "PosColor.frag_spv")));
+		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createUBOVertexPipeline(presenterptr, (shaderPath_ / "PosColorMVP.vert_spv"), (shaderPath_ / "PosColor.frag_spv")));
 		if (!pipelineResult.has_value()) {
 			return tl::make_unexpected(pipelineResult.error());
 		}
@@ -713,7 +713,7 @@ struct TexPipelineStage {
 		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 		std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 
-		tl::expected<bainangua::PipelineBundle, std::pmr::string> pipelineResult(bainangua::createTexVertexPipeline(presenterptr, (shaderPath_ / "TexturedMVP.vert_spv"), (shaderPath_ / "Textured.frag_spv")));
+		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createTexVertexPipeline(presenterptr, (shaderPath_ / "TexturedMVP.vert_spv"), (shaderPath_ / "Textured.frag_spv")));
 		if (!pipelineResult.has_value()) {
 			return tl::make_unexpected(pipelineResult.error());
 		}

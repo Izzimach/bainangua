@@ -23,7 +23,6 @@ module;
 #include <format>
 #include <functional>
 #include <iostream>
-#include <memory_resource>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -251,7 +250,7 @@ struct StandardDevice {
         vk::SurfaceKHR surface            = boost::hana::at_key(r, BOOST_HANA_STRING("surface"));
 
         // get the QueueFamilyProperties of the first PhysicalDevice
-        std::pmr::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties<std::pmr::polymorphic_allocator<vk::QueueFamilyProperties>>();
+        std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
 
         // get the first index into queueFamiliyProperties which supports graphics
         auto graphicsQueueIterator =
@@ -275,7 +274,7 @@ struct StandardDevice {
         // We look for a graphics queue and present queue. If they end up in the same family, we create one queue. If they
         // are in different families then we create two queues, one for each family.
         float queuePriority = 0.0f;
-        std::pmr::vector<vk::DeviceQueueCreateInfo> queues{ vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), graphicsQueueFamilyIndex, 1, &queuePriority) };
+        std::vector<vk::DeviceQueueCreateInfo> queues{ vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), graphicsQueueFamilyIndex, 1, &queuePriority) };
         if (graphicsQueueFamilyIndex != presentQueueFamilyIndex.value())
         {
             queues.emplace_back(vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), presentQueueFamilyIndex.value(), 1, &queuePriority));
@@ -283,7 +282,7 @@ struct StandardDevice {
 
         // create a Logical Device (finally!)
         std::array<const char*, 0> layers;
-        std::pmr::vector<const char*> extensions{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+        std::vector<const char*> extensions{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
         vk::PhysicalDeviceFeatures features;
         features.setSamplerAnisotropy(true);
         vk::DeviceCreateInfo deviceInfo(
@@ -346,7 +345,7 @@ struct CreateGLFWWindowAndSurface {
         VkResult err = glfwCreateWindowSurface(instance, window, nullptr, &surface);
         if (err != VK_SUCCESS)
         {
-            std::pmr::string s;
+            std::string s;
             std::format_to(std::back_inserter(s), "Error from glfwCreateWindowSurface: {}\n", +err);
             return tl::make_unexpected(s);
         }
@@ -377,12 +376,12 @@ struct FirstSwapchainPhysicalDevice {
         vk::Instance instance = boost::hana::at_key(r, BOOST_HANA_STRING("instance"));
 
         // enumerate the physicalDevices
-        std::pmr::vector<vk::PhysicalDevice> physicalDevices = instance.enumeratePhysicalDevices<std::pmr::polymorphic_allocator<vk::PhysicalDevice>>();
+        std::vector<vk::PhysicalDevice> physicalDevices = instance.enumeratePhysicalDevices();
 
         // filter out devices that don't support a swapchain or anisotropy
         auto deviceIsSuitable= [](vk::PhysicalDevice device) {
             // check device extensions
-            std::pmr::vector<vk::ExtensionProperties> deviceProperties = device.enumerateDeviceExtensionProperties<std::pmr::polymorphic_allocator<vk::ExtensionProperties>>();
+            std::vector<vk::ExtensionProperties> deviceProperties = device.enumerateDeviceExtensionProperties();
             std::cout << std::format("{} device properties supported\n", deviceProperties.size());
             for (auto& prop : deviceProperties)
             {
@@ -431,7 +430,7 @@ struct StandardVulkanInstance {
         totalExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
         // InstanceCreateInfo needs the extensions as raw strings
-        std::pmr::vector<const char*> rawExtensionStrings;
+        std::vector<const char*> rawExtensionStrings;
         std::ranges::for_each(totalExtensions.begin(), totalExtensions.end(), [&](const std::string& s) { rawExtensionStrings.push_back(s.c_str()); });
 
         std::cout << std::format("total required extensions:\n");
@@ -440,19 +439,19 @@ struct StandardVulkanInstance {
         }
 
         // dump list of available extensions
-        std::pmr::vector<vk::ExtensionProperties> vulkanExtensions = vk::enumerateInstanceExtensionProperties<std::pmr::polymorphic_allocator<vk::ExtensionProperties>>(nullptr);
+        std::vector<vk::ExtensionProperties> vulkanExtensions = vk::enumerateInstanceExtensionProperties(nullptr);
         std::cout << std::format("{} extensions supported\n", vulkanExtensions.size());
         for (auto& prop : vulkanExtensions) {
             std::cout << std::format("supported: {}\n", prop.extensionName.operator std::string());
         }
 
         // check validation layers
-        std::pmr::vector<const char*> totalLayers;
+        std::vector<const char*> totalLayers;
         if (config.useValidation) {
             totalLayers.emplace_back("VK_LAYER_KHRONOS_validation");
         }
 
-        std::pmr::vector<vk::LayerProperties> vulkanLayers = vk::enumerateInstanceLayerProperties<std::pmr::polymorphic_allocator<vk::LayerProperties>>();
+        std::vector<vk::LayerProperties> vulkanLayers = vk::enumerateInstanceLayerProperties();
         auto validationLayers = vulkanLayers
             | std::views::transform([](vk::LayerProperties p) { std::string s = p.layerName; return s; })
             | std::views::filter([](std::string n) { return n == std::string("VK_LAYER_KHRONOS_validation"); });

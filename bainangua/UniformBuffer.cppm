@@ -35,14 +35,14 @@ export struct UniformBufferBundle {
 	void* mappedMemory;
 };
 
-export auto destroyUniformBuffers(VmaAllocator allocator, std::pmr::vector<UniformBufferBundle> buffers) -> void {
+export auto destroyUniformBuffers(VmaAllocator allocator, std::vector<UniformBufferBundle> buffers) -> void {
 	for (auto& b : buffers) {
 		vmaDestroyBuffer(allocator, b.ubo, b.allocation);
 
 	}
 }
 
-export auto createUniformBuffers(VmaAllocator allocator) -> bng_expected<std::pmr::vector<UniformBufferBundle>> {
+export auto createUniformBuffers(VmaAllocator allocator) -> bng_expected<std::vector<UniformBufferBundle>> {
 	vk::DeviceSize bufferSize = sizeof(BasicUBO);
 
 	VkBufferCreateInfo bufferCreateInfo{
@@ -62,7 +62,7 @@ export auto createUniformBuffers(VmaAllocator allocator) -> bng_expected<std::pm
 		.priority = 0.0f
 	};
 
-	std::pmr::vector<UniformBufferBundle> uniformBuffers;
+	std::vector<UniformBufferBundle> uniformBuffers;
 
 	for (size_t i = 0; i < bainangua::MultiFrameCount; i++) {
 		VkBuffer buffer;
@@ -105,7 +105,7 @@ export auto destroyUniformBuffer(VmaAllocator allocator, UniformBufferBundle UBO
 	vmaDestroyBuffer(allocator, UBOBundle.ubo, UBOBundle.allocation);
 }
 
-export auto linkUBOAndDescriptors(const VulkanContext& s, std::pmr::vector<UniformBufferBundle> ubos, std::pmr::vector<vk::DescriptorSet> descriptors) -> bng_expected<void> {
+export auto linkUBOAndDescriptors(const VulkanContext& s, std::vector<UniformBufferBundle> ubos, std::vector<vk::DescriptorSet> descriptors) -> bng_expected<void> {
 	if (ubos.size() != descriptors.size()) {
 		return tl::make_unexpected("configureUBODescriptors: ubos count does not match descriptor count");
 	}
@@ -128,14 +128,14 @@ export struct CreateAndLinkUniformBuffersStage {
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
 		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
-		std::pmr::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
+		std::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
 
 		auto createResult = createUniformBuffers(context.vmaAllocator);
 		if (!createResult) {
 			return tl::make_unexpected(createResult.error());
 		}
 
-		std::pmr::vector<UniformBufferBundle> ubos = createResult.value();
+		std::vector<UniformBufferBundle> ubos = createResult.value();
 		auto linkResult = linkUBOAndDescriptors(context, ubos, descriptorSets);
 		if (!linkResult) {
 			destroyUniformBuffers(context.vmaAllocator, ubos);

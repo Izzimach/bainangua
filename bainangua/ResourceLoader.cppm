@@ -248,7 +248,7 @@ public:
                     // However there shouldn't be any waiters since the refCount is zero
                     resourceStore->loadedEvent_.reset();
 
-                    resourceStore->resourceValue_ = tl::make_unexpected(std::pmr::string("resource not loaded"));
+                    resourceStore->resourceValue_ = tl::make_unexpected(std::string("resource not loaded"));
 
                     if (resourceStore->unloader_.has_value()) {
                         coro::task<bng_expected<void>> unloaderTask = std::move(resourceStore->unloader_.value());
