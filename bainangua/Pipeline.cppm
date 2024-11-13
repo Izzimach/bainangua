@@ -35,7 +35,7 @@ std::pmr::vector<char> readFile(std::filesystem::path filePath)
 	std::streamsize readCount = fs.gcount();
 	fs.close();
 
-	assert(readCount == fileSize);
+	assert((size_t)readCount == fileSize);
 
 	return dataBuffer;
 }

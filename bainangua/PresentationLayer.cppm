@@ -123,9 +123,8 @@ export std::shared_ptr<PresentationLayer> buildPresentationLayer(const VulkanCon
 	auto useableModes = std::find_if(swapChainInfo.presentModes.begin(), swapChainInfo.presentModes.end(), [](vk::PresentModeKHR s) { return s == vk::PresentModeKHR::eFifo; });
 	
 	assert(useableFormat != swapChainInfo.formats.end());
-	assert(useableModes   != swapChainInfo.presentModes.end());
+	assert(useableModes  != swapChainInfo.presentModes.end());
 
-	
 	vk::SurfaceFormatKHR swapChainFormat = *useableFormat;
 
 	uint32_t swapChainImageCount = chooseSwapChainImageCount(swapChainInfo);
