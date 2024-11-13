@@ -56,6 +56,37 @@ namespace {
 				return result;
 			});
 		};
+
+
+		struct FourInts {
+			int x;
+			int y;
+			int z;
+			int a;
+		};
+
+		BENCHMARK_ADVANCED("struct accesss - 5 fields")(Catch::Benchmark::Chronometer meter) {
+			FourInts val(1, 2, 3, 4);
+			meter.measure([&val] {return val.x + val.y + val.z + val.a; });
+		};
+
+		BENCHMARK_ADVANCED("boost::hana::map accesss - 3 fields")(Catch::Benchmark::Chronometer meter) {
+			auto hanamap = boost::hana::make_map(
+				boost::hana::make_pair(BOOST_HANA_STRING("x"), 1),
+				boost::hana::make_pair(BOOST_HANA_STRING("y"), 2),
+				boost::hana::make_pair(BOOST_HANA_STRING("z"), 3),
+				boost::hana::make_pair(BOOST_HANA_STRING("a"), 4)
+			);
+
+			meter.measure([&hanamap] {
+				return
+					boost::hana::at_key(hanamap, BOOST_HANA_STRING("x")) +
+					boost::hana::at_key(hanamap, BOOST_HANA_STRING("y")) +
+					boost::hana::at_key(hanamap, BOOST_HANA_STRING("z")) +
+					boost::hana::at_key(hanamap, BOOST_HANA_STRING("a"));
+				});
+		};
+
 	}
 
 	TEST_CASE("RowType Wrappers", "[Basic][RowType]")
