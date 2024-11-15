@@ -50,10 +50,6 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
-      "environment": {
-        "CFLAGS": "/fsanitize-address",
-        "CXXFLAGS": "/fsanitize-address"
-      },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "cl.exe",
         "CMAKE_CXX_COMPILER": "cl.exe",
