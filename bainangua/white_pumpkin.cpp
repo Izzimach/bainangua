@@ -7,10 +7,6 @@
 #include "tanuki.hpp"
 #include "white_pumpkin.hpp"
 
-#ifdef NDEBUG
-#include <windows.h>
-#endif
-
 #include <algorithm>
 #include <concepts>
 #include <filesystem>
@@ -22,6 +18,10 @@
 #include <coro/coro.hpp>
 #include <map>
 #include <vector>
+
+#ifdef NDEBUG
+#include <windows.h>
+#endif
 
 import Commands;
 import VulkanContext;
@@ -191,7 +191,7 @@ using TestResourceStore = bainangua::SingleResourceKey<Key, Resource>;
 
 
 #ifdef NDEBUG
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
+int WINAPI wWinMain(HINSTANCE , HINSTANCE , PWSTR , int )
 #else
 int main()
 #endif
@@ -248,7 +248,7 @@ int main()
 				return stages.applyRow(stageRow);*/
 
 				auto loaderDirectory = boost::hana::make_map(
-					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<std::string, int>>,[]<typename Resources, typename Storage>(coro::thread_pool& pool, bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<std::string,int> key) -> coro::task<bainangua::bng_expected<int>> {
+					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<std::string, int>>,[]<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<std::string,int> key) -> coro::task<bainangua::bng_expected<int>> {
 						std::cout << "int loader running\n";
 
 						auto k1 = TestResourceStore<int, float>{ 1 };
@@ -267,7 +267,7 @@ int main()
 							})
 						);
 					}),
-					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<int,float>>,[]<typename Resources, typename Storage>(coro::thread_pool& pool, bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<int,float> key) -> coro::task<bainangua::bng_expected<float>> {
+					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<int,float>>,[]<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<int,float> key) -> coro::task<bainangua::bng_expected<float>> {
 						std::cout << "float loader running\n";
 						co_return bainangua::bng_expected<float>(3.0f + static_cast<float>(key.key));
 					})
