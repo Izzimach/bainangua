@@ -25,6 +25,8 @@ namespace RowTypeTests {
 		REQUIRE(getRowField<"name"_field>(simpleRow) == std::string("argh"));
 		REQUIRE(boost::hana::at_key(simpleRow, boost::hana::int_c<4>) == 3.0f);
 
+// skip benchmarks in debug builds
+#ifdef NDEBUG
 		//
 		// boost::hana::map benchmarks. We compare accessing ints from a hana map and compare it to simply accessing ints from
 		// a dumb struct.  There are several benchmarks, each using a different number of fields. (3,4,5)
@@ -106,6 +108,7 @@ namespace RowTypeTests {
 					boost::hana::at_key(hanamap, BOOST_HANA_STRING("a"));
 				});
 		};
+#endif
 
 	}
 
