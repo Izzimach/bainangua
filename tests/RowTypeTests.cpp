@@ -13,7 +13,7 @@
 
 using namespace RowType;
 
-namespace {
+namespace RowTypeTests {
 
 	TEST_CASE("Basic RowType Tests", "[Basic][RowType]")
 	{

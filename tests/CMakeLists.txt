@@ -22,6 +22,12 @@ target_include_directories(nangua_test PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
 )
 
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    target_compile_options(nangua_test PRIVATE /W4)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_compile_options(nangua_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 target_link_libraries(nangua_test PRIVATE glfw)
 target_link_libraries(nangua_test PRIVATE Vulkan::Vulkan)
 target_link_libraries(nangua_test PRIVATE Catch2::Catch2WithMain)

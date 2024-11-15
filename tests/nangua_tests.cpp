@@ -9,6 +9,7 @@
 #include <expected.hpp>
 #include <filesystem>
 
+
 import Commands;
 import DescriptorSets;
 import OneFrame;
@@ -19,9 +20,7 @@ import UniformBuffer;
 import VertexBuffer;
 import VulkanContext;
 
-using namespace bainangua;
-
-namespace {
+namespace bainangua_BaseTests {
 
 std::filesystem::path ShaderPath = SHADER_DIR;
 
@@ -31,41 +30,12 @@ struct NoRenderLoop {
 
 	template<typename Row>
 	constexpr tl::expected<int, std::string> applyRow(Row r) {
-		VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		bainangua::VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 		s.endOfFrame();
 		return 0;
 	}
 };
 
-auto wrapRenderLoop(std::string_view name, std::function<bool(VulkanContext&)> renderLoop) -> bng_expected<bool> {
-	return createVulkanContext(
-		VulkanContextConfig{
-			.AppName = std::string(name),
-			.requiredExtensions = {
-					VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
-					VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
-					VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-			},
-			.useValidation = false,
-			.innerCode = renderLoop
-		}
-	);
-}
-
-template <typename RowFunction>
-auto wrapRenderLoopRow(std::string_view name, RowFunction f) -> bng_expected<bool> {
-	return wrapRenderLoop(
-		name,
-		[&](VulkanContext& s) -> bool {
-			auto r = boost::hana::make_map(
-				boost::hana::make_pair(BOOST_HANA_STRING("context"), s),
-				boost::hana::make_pair(BOOST_HANA_STRING("device"), s.vkDevice)
-			);
-			auto result = f.applyRow(r);
-			return true;
-		}
-	);
-}
 
 struct DrawNoVertexGeometry {
 	using row_tag = RowType::RowFunctionTag;
@@ -177,7 +147,7 @@ struct UpdateUniformBuffer {
 TEST_CASE("VulkanContext", "[Basic]")
 {
 	REQUIRE(
-		wrapRenderLoopRow("Basic Test", NoRenderLoop()) == bng_expected<bool>(true)
+		wrapRenderLoopRow("Basic Test", NoRenderLoop()) == bainangua::bng_expected<bool>(true)
 	);
 }
 
@@ -186,9 +156,9 @@ TEST_CASE("PresentationLayer", "[Basic]")
 	REQUIRE(
 		wrapRenderLoopRow(
 			"PresentationLayer Pipeline Test App", 
-			PresentationLayerStage() | NoRenderLoop()
+			bainangua::PresentationLayerStage() | NoRenderLoop()
 		)
-		== bng_expected<bool>(true)
+		== bainangua::bng_expected<bool>(true)
 	);
 }
 
@@ -197,15 +167,15 @@ TEST_CASE("OneFrame", "[Basic][Rendering]")
 	REQUIRE(
 		wrapRenderLoopRow(
 			"OneFrame Pipeline Test App",
-			PresentationLayerStage()
-			| NoVertexPipelineStage(ShaderPath)
+			bainangua::PresentationLayerStage()
+			| bainangua::NoVertexPipelineStage(ShaderPath)
 			| bainangua::SimpleGraphicsCommandPoolStage()
 			| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
-			| StandardMultiFrameLoop(10)
-			| BasicRendering()
+			| bainangua::StandardMultiFrameLoop(10)
+			| bainangua::BasicRendering()
 			| DrawNoVertexGeometry()
 		)
-		== (bng_expected<bool>(true))
+		== (bainangua::bng_expected<bool>(true))
 	);
 }
 
@@ -214,16 +184,16 @@ TEST_CASE("VertexBuffer","[Rendering]")
 	REQUIRE(
 		wrapRenderLoopRow(
 			"VertexBuffer Pipeline Test App",
-			PresentationLayerStage()
-			| VTVertexPipelineStage(ShaderPath)
+			bainangua::PresentationLayerStage()
+			| bainangua::VTVertexPipelineStage(ShaderPath)
 			| bainangua::SimpleGraphicsCommandPoolStage()
-			| GPUVertexBufferStage()
+			| bainangua::GPUVertexBufferStage()
 			| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
-			| StandardMultiFrameLoop(10)
-			| BasicRendering()
+			| bainangua::StandardMultiFrameLoop(10)
+			| bainangua::BasicRendering()
 			| DrawVertexGeometry()
 		)
-		== (bng_expected<bool>(true))
+		== (bainangua::bng_expected<bool>(true))
 	);
 }
 
@@ -232,17 +202,17 @@ TEST_CASE("IndexBuffer", "[Rendering]")
 	REQUIRE(
 		wrapRenderLoopRow(
 			"IndexBuffer Pipeline Test App",
-			PresentationLayerStage()
-			| VTVertexPipelineStage(ShaderPath)
+			bainangua::PresentationLayerStage()
+			| bainangua::VTVertexPipelineStage(ShaderPath)
 			| bainangua::SimpleGraphicsCommandPoolStage()
 			| bainangua::GPUIndexedVertexBufferStage(bainangua::indexedStaticVertices)
-			| GPUIndexBufferStage()
+			| bainangua::GPUIndexBufferStage()
 			| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
-			| StandardMultiFrameLoop(10)
-			| BasicRendering()
+			| bainangua::StandardMultiFrameLoop(10)
+			| bainangua::BasicRendering()
 			| DrawIndexedVertexGeometry()
 		)
-		== (bng_expected<bool>(true))
+		== (bainangua::bng_expected<bool>(true))
 	);
 }
 
@@ -267,7 +237,7 @@ TEST_CASE("Uniform Buffer Object", "[Rendering]")
 			| bainangua::BasicRendering()
 			| DrawMVPIndexedGeometry()
 		)
-		== bng_expected<bool>(true)
+		== bainangua::bng_expected<bool>(true)
 	);
 }
 

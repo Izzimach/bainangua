@@ -1,6 +1,47 @@
+#include "bainangua.hpp"
+
+#include <boost/hana/map.hpp>
+#include <boost/hana/string.hpp>
+#include <boost/hana/pair.hpp>
+#include <boost/hana/at_key.hpp>
+#include <expected.hpp>
+
+import VulkanContext;
 
 
 #cmakedefine ASSETS_DIR "@ASSETS_DIR@"
 
 #define SHADER_DIR ASSETS_DIR "/shaders"
 #define TEXTURES_DIR ASSETS_DIR "/textures"
+
+
+inline auto wrapRenderLoop(std::string_view name, std::function<bool(bainangua::VulkanContext&)> renderLoop) -> bainangua::bng_expected<bool> {
+	return bainangua::createVulkanContext(
+		bainangua::VulkanContextConfig{
+			.AppName = std::string(name),
+			.requiredExtensions = {
+					VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
+					VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
+					VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
+			},
+			.useValidation = false,
+			.innerCode = renderLoop
+		}
+	);
+}
+
+template <typename RowFunction>
+auto wrapRenderLoopRow(std::string_view name, RowFunction f) -> bainangua::bng_expected<bool> {
+	return wrapRenderLoop(
+		name,
+		[&](bainangua::VulkanContext& s) -> bool {
+			auto r = boost::hana::make_map(
+				boost::hana::make_pair(BOOST_HANA_STRING("context"), s),
+				boost::hana::make_pair(BOOST_HANA_STRING("device"), s.vkDevice)
+			);
+			auto result = f.applyRow(r);
+			return true;
+		}
+	);
+}
+
