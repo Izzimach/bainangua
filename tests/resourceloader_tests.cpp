@@ -22,6 +22,30 @@ import ResourceLoader;
 
 namespace ResourceLoaderTests {
 
+auto testLoaders = boost::hana::make_map(
+	boost::hana::make_pair(boost::hana::type_c<bainangua::SingleResourceKey<std::string, int>>, []<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>&loader, bainangua::SingleResourceKey<std::string, int> key) -> coro::task<bainangua::bng_expected<int>> {
+
+	std::cout << "int loader running\n";
+
+	auto k1 = bainangua::SingleResourceKey<int, float>{ 1 };
+	auto k2 = bainangua::SingleResourceKey<int, float>{ 1 };
+
+	const auto results = co_await coro::when_all(loader.loadResource(k1), loader.loadResource(k2));
+	auto result1 = std::get<0>(results).return_value();
+	auto result2 = std::get<1>(results).return_value();
+
+	co_return result1.and_then([&](auto xval) {
+		return result2.transform([&](auto yval) {
+			return static_cast<int>(xval + yval);
+			});
+		});
+}),
+	boost::hana::make_pair(boost::hana::type_c<bainangua::SingleResourceKey<int, float>>, []<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>& loader, bainangua::SingleResourceKey<int, float> key) -> coro::task<bainangua::bng_expected<float>> {
+	std::cout << "float loader running\n";
+	co_return bainangua::bng_expected<float>(3.0f + static_cast<float>(key.key));
+})
+);
+
 
 struct ResourceLoaderInit {
 	using row_tag = RowType::RowFunctionTag;
@@ -31,34 +55,8 @@ struct ResourceLoaderInit {
 	constexpr tl::expected<int, std::string> applyRow(Row r) {
 		bainangua::VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 
-		auto loaderDirectory = boost::hana::make_map(
-			boost::hana::make_pair(boost::hana::type_c<bainangua::SingleResourceKey<std::string, int>>, []<typename Resources, typename Storage>(coro::thread_pool & pool, bainangua::ResourceLoader<Resources, Storage>&loader, bainangua::SingleResourceKey<std::string, int> key) -> coro::task<bainangua::bng_expected<int>> {
-
-				std::cout << "int loader running\n";
-
-				auto k1 = bainangua::SingleResourceKey<int, float>{ 1 };
-				auto k2 = bainangua::SingleResourceKey<int, float>{ 1 };
-
-				const auto results = co_await coro::when_all(loader.loadResource(k1), loader.loadResource(k2));
-				auto result1 = std::get<0>(results).return_value();
-				auto result2 = std::get<1>(results).return_value();
-				//auto result1 = co_await loader.loadResource(k1);
-				//auto result2 = co_await loader.loadResource(k2);
-
-				co_return result1.and_then([&](auto xval) {
-					return result2.transform([&](auto yval) {
-						return static_cast<int>(xval + yval);
-					});
-				});
-			}),
-			boost::hana::make_pair(boost::hana::type_c<bainangua::SingleResourceKey<int, float>>, []<typename Resources, typename Storage>(coro::thread_pool & pool, bainangua::ResourceLoader<Resources, Storage>&loader, bainangua::SingleResourceKey<int, float> key) -> coro::task<bainangua::bng_expected<float>> {
-				std::cout << "float loader running\n";
-				co_return bainangua::bng_expected<float>(3.0f + static_cast<float>(key.key));
-			})
-		);
-
 		auto loaderStorage = boost::hana::fold_left(
-			loaderDirectory,
+			testLoaders,
 			boost::hana::make_map(),
 			[](auto accumulator, auto v) {
 				auto HanaKey = boost::hana::first(v);
@@ -75,7 +73,7 @@ struct ResourceLoaderInit {
 		bainangua::bng_expected<bool> result{ true };
 
 		try {
-			std::shared_ptr<bainangua::ResourceLoader<decltype(loaderDirectory), decltype(loaderStorage)>> loader(std::make_shared<bainangua::ResourceLoader<decltype(loaderDirectory), decltype(loaderStorage)>>(s, loaderDirectory));
+			std::shared_ptr<bainangua::ResourceLoader<decltype(testLoaders), decltype(loaderStorage)>> loader(std::make_shared<bainangua::ResourceLoader<decltype(testLoaders), decltype(loaderStorage)>>(s, testLoaders));
 			auto k = bainangua::SingleResourceKey<std::string, int>{ "argh" };
 			coro::task<bainangua::bng_expected<int>> loading1 = loader->loadResource(k);
 			bainangua::bng_expected<int> result1 = coro::sync_wait(loading1);

@@ -212,7 +212,7 @@ public:
         // this is a coroutine, no lambda capture for me
         auto loadAndGo = [](ResourceLoader* self, LookupKey key, std::shared_ptr<SingleResourceStore<LookupKey::resource_type>> storePtr) -> coro::task<void> {
             auto &loader = boost::hana::at_key(self->loaders_, boost::hana::type_c<LookupKey>);
-            auto loadedValue = co_await loader(*(self->tp), *self, key);
+            auto loadedValue = co_await loader(*self, key);
 
             coro::scoped_lock resourceLock = co_await storePtr->resourceMutex_.lock();
             storePtr->resourceValue_ = loadedValue;
