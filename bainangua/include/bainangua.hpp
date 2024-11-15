@@ -15,6 +15,7 @@
 #include <immer/memory_policy.hpp>
 #include <immer/array.hpp>
 #include <immer/vector.hpp>
+#include <immer/map.hpp>
 #include <expected.hpp>
 #include <string_view>
 
@@ -32,6 +33,9 @@ namespace bainangua {
 
 	template <typename T>
 	using bng_vector = immer::vector<T, bainangua_memory_policy>;
+
+	template <typename K, typename T>
+	using bng_map = immer::map<K, T, std::hash<K>, std::equal_to<K>, bainangua_memory_policy>;
 
 	using bng_errorobject = std::string;
 
