@@ -1,4 +1,5 @@
 ﻿
+
 #include <boost/hana/assert.hpp>
 #include <boost/hana/contains.hpp>
 #include <boost/hana/integral_constant.hpp>
@@ -14,6 +15,11 @@
 namespace RowType {
 
 	void testRowTypes();
+
+	template <typename Row>
+	constexpr auto getRowField(Row r, const char* fieldName) {
+		return boost::hana::at_key(r, BOOST_HANA_STRING(fieldName));
+	}
 
 	template <typename Row, boost::hana::string FieldName, typename FieldType>
 	concept has_named_field = requires (Row s) {
@@ -36,7 +42,7 @@ namespace RowType {
 		constexpr MakeArray(char const(&arr)[N]) : MakeArray(arr, std::make_integer_sequence<std::size_t, N>())
 		{}
 	};
-
+	
 	//
 	// WTF
 	//
@@ -72,27 +78,7 @@ namespace RowType {
 		return boost::hana::at_key(s, FieldName);
 	}
 
-
-	template <typename T>
-		requires has_named_field<T, BOOST_HANA_STRING(u8"白南瓜"), std::string>
-	constexpr std::string getArghField(T values)
-	{
-		std::string x = getRowField<BOOST_HANA_STRING(u8"白南瓜"), T>(values);
-		return x;
-	}
-
-
-
-	template <typename T>
-	[[nodiscard]] int instanceWrapper(T x) {
-		auto simpleRow = boost::hana::make_map(
-			boost::hana::make_pair(BOOST_HANA_STRING(u8"白南瓜"), std::string("blargh")),
-			boost::hana::make_pair(boost::hana::int_c<4>, 3.0f)
-		);
-
-		return x.toRow(simpleRow);
-	}
-
+		
 	struct RowWrapperTag {};
 	struct RowFunctionTag {};
 
@@ -153,7 +139,6 @@ namespace RowType {
 
 		template <typename Row>
 		constexpr V applyRow(Row r) {
-			static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("a"), std::string>, "Row must have field named 'a'");
 			return boost::hana::at_key(r, boost::hana::int_c<4>);
 		}
 	};

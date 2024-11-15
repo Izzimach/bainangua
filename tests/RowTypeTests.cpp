@@ -41,6 +41,11 @@ namespace {
 			meter.measure([&val] { return val.x + val.y + val.z; });
 		};
 
+		BENCHMARK_ADVANCED("tuple access - 3 fields")(Catch::Benchmark::Chronometer meter) {
+			auto val = std::make_tuple(1, 2, 3);
+			meter.measure([&val] { return std::get<0>(val) + std::get<1>(val) + std::get<2>(val); });
+		};
+
 		BENCHMARK_ADVANCED("boost::hana::map accesss - 3 fields")(Catch::Benchmark::Chronometer meter) {
 			auto hanamap = boost::hana::make_map(
 				boost::hana::make_pair(BOOST_HANA_STRING("x"), 1),
@@ -54,7 +59,22 @@ namespace {
 					boost::hana::at_key(hanamap, BOOST_HANA_STRING("y")) +
 					boost::hana::at_key(hanamap, BOOST_HANA_STRING("z"));
 				return result;
-			});
+				});
+		};
+		BENCHMARK_ADVANCED("boost::hana::map accesss - 3 fields - backwards")(Catch::Benchmark::Chronometer meter) {
+			auto hanamap = boost::hana::make_map(
+				boost::hana::make_pair(BOOST_HANA_STRING("x"), 1),
+				boost::hana::make_pair(BOOST_HANA_STRING("y"), 2),
+				boost::hana::make_pair(BOOST_HANA_STRING("z"), 3)
+			);
+
+			meter.measure([&hanamap] {
+				int result =
+					boost::hana::at_key(hanamap, BOOST_HANA_STRING("z")) +
+					boost::hana::at_key(hanamap, BOOST_HANA_STRING("y")) +
+					boost::hana::at_key(hanamap, BOOST_HANA_STRING("x"));
+				return result;
+				});
 		};
 
 
@@ -65,12 +85,12 @@ namespace {
 			int a;
 		};
 
-		BENCHMARK_ADVANCED("struct accesss - 5 fields")(Catch::Benchmark::Chronometer meter) {
+		BENCHMARK_ADVANCED("struct accesss - 4 fields")(Catch::Benchmark::Chronometer meter) {
 			FourInts val(1, 2, 3, 4);
 			meter.measure([&val] {return val.x + val.y + val.z + val.a; });
 		};
 
-		BENCHMARK_ADVANCED("boost::hana::map accesss - 3 fields")(Catch::Benchmark::Chronometer meter) {
+		BENCHMARK_ADVANCED("boost::hana::map accesss - 4 fields")(Catch::Benchmark::Chronometer meter) {
 			auto hanamap = boost::hana::make_map(
 				boost::hana::make_pair(BOOST_HANA_STRING("x"), 1),
 				boost::hana::make_pair(BOOST_HANA_STRING("y"), 2),
