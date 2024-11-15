@@ -248,7 +248,7 @@ int main()
 				return stages.applyRow(stageRow);*/
 
 				auto loaderDirectory = boost::hana::make_map(
-					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<std::string, int>>,[]<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<std::string,int> key) -> coro::task<bainangua::bng_expected<int>> {
+					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<std::string, int>>,[]<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<std::string,int> key) -> bainangua::LoaderRoutine<int> {
 						std::cout << "int loader running\n";
 
 						auto k1 = TestResourceStore<int, float>{ 1 };
@@ -257,19 +257,33 @@ int main()
 						const auto results = co_await coro::when_all(loader.loadResource(k1), loader.loadResource(k2));
 						auto result1 = std::get<0>(results).return_value();
 						auto result2 = std::get<1>(results).return_value();
-						//auto result1 = co_await loader.loadResource(k1);
-						//auto result2 = co_await loader.loadResource(k2);
 
-						co_return (result1.and_then([&](auto xval) {
-							return result2.transform([&](auto yval) {
-								return static_cast<int>(xval+yval);
-								});
-							})
-						);
+						if (result1.has_value() && result2.has_value()) {
+							co_return bainangua::bng_expected<bainangua::LoaderResults<int>>(
+								{
+									.resource_ = static_cast<int>(result1.value() + result2.value()),
+									.unloader_ = []() -> coro::task<bainangua::bng_expected<void>> {
+										std::cout << "unloading int resource\n";
+										co_return{};
+									}()
+								}
+							);
+						}
+						else {
+							co_return bainangua::bng_unexpected<bainangua::LoaderResults<int>>("error loading dependencies");
+						}
 					}),
-					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<int,float>>,[]<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<int,float> key) -> coro::task<bainangua::bng_expected<float>> {
+					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<int,float>>,[]<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<int,float> key) -> bainangua::LoaderRoutine<float> {
 						std::cout << "float loader running\n";
-						co_return bainangua::bng_expected<float>(3.0f + static_cast<float>(key.key));
+						co_return bainangua::bng_expected<bainangua::LoaderResults<float>>(
+							{
+								.resource_ = 3.0f + static_cast<float>(key.key),
+								.unloader_ = []() -> coro::task<bainangua::bng_expected<void>> {
+									std::cout << "unloading float resource\n";
+									co_return{};
+								}()
+							}
+						);
 					})
 				);
 

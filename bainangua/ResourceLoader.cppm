@@ -41,6 +41,16 @@ constexpr bool operator==(const SingleResourceKey<LookupType, ResourceType>& a, 
     return a.key == b.key;
 }
 
+export
+template <typename ResourceType>
+struct LoaderResults {
+    ResourceType resource_;
+    std::optional<coro::task<bng_expected<void>>> unloader_;
+};
+
+export
+template <typename ResourceType>
+using LoaderRoutine = coro::task<bainangua::bng_expected<LoaderResults<ResourceType>>>;
 
 export
 template <typename ResourceType>
@@ -185,13 +195,10 @@ public:
                 co_return co_await resourceStore->getterTask();
             }
             else {
-                // first insert a ResourceStore to marked where the resource will be put, so that other threads/tasks can wait on it
+                // first insert a ResourceStore to mark where the resource will be put, so that other threads/tasks can wait on it
                 // note we are still under the storage lock mutex here...
                 std::unique_ptr<SingleResourceStore<LookupKey::resource_type>> storePtr(new SingleResourceStore<LookupKey::resource_type>(1));
-                storePtr->unloader_ = []() -> coro::task<bng_expected<void>> {
-                    std::cout << "unloading resource\n";
-                    co_return{};
-                    }();
+                storePtr->unloader_ = std::nullopt;
                 auto emplaceResult = boost::hana::at_key(self->storage_, boost::hana::type_c<LookupKey>).emplace(key, std::move(storePtr));
 
                 std::shared_ptr<SingleResourceStore<LookupKey::resource_type>> resourceStore = std::get<0>(emplaceResult)->second;
@@ -211,11 +218,19 @@ public:
     {
         // this is a coroutine, no lambda capture for me
         auto loadAndGo = [](ResourceLoader* self, LookupKey key, std::shared_ptr<SingleResourceStore<LookupKey::resource_type>> storePtr) -> coro::task<void> {
-            auto &loader = boost::hana::at_key(self->loaders_, boost::hana::type_c<LookupKey>);
-            auto loadedValue = co_await loader(*self, key);
+            auto& loader = boost::hana::at_key(self->loaders_, boost::hana::type_c<LookupKey>);
+            bng_expected<LoaderResults<LookupKey::resource_type>> result = co_await loader(*self, key);
 
             coro::scoped_lock resourceLock = co_await storePtr->resourceMutex_.lock();
-            storePtr->resourceValue_ = loadedValue;
+            if (result.has_value()) {
+                storePtr->resourceValue_ = result.value().resource_;
+                storePtr->unloader_ = std::move(result.value().unloader_);
+            }
+            
+            else {
+                storePtr->resourceValue_ = bng_unexpected<LookupKey::resource_type>(result.error());
+            }
+
             // signal the event to wake up waiters. We do this even if the loader failed, so that waiters
             // will see the error
             storePtr->loadedEvent_.set();
