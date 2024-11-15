@@ -249,8 +249,6 @@ int main()
 
 				auto loaderDirectory = boost::hana::make_map(
 					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<std::string, int>>,[]<typename Resources, typename Storage>(coro::thread_pool& pool, bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<std::string,int> key) -> coro::task<bainangua::bng_expected<int>> {
-						co_await pool.schedule();
-
 						std::cout << "int loader running\n";
 
 						auto k1 = TestResourceStore<int, float>{ 1 };
@@ -270,7 +268,6 @@ int main()
 						);
 					}),
 					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<int,float>>,[]<typename Resources, typename Storage>(coro::thread_pool& pool, bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<int,float> key) -> coro::task<bainangua::bng_expected<float>> {
-						co_await pool.schedule();
 						std::cout << "float loader running\n";
 						co_return bainangua::bng_expected<float>(3.0f + static_cast<float>(key.key));
 					})
