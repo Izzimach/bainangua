@@ -160,10 +160,23 @@ public:
     void operator=(ResourceLoader&&) = delete;
 
     ~ResourceLoader() {
-        // w
+        // some unloads might still be queued, wait for them to finish
         coro::sync_wait(autoTasks.garbage_collect_and_yield_until_empty());
         tp->shutdown();
         std::cout << "ResourceLoader destructor\n";
+    }
+
+    size_t measureLoad() {
+        // wait for unloads to finish
+        coro::sync_wait(autoTasks.garbage_collect_and_yield_until_empty());
+        size_t totalSize = boost::hana::fold_left(storage_,
+            0,
+            [](auto accumulator, auto v) {
+                auto storageMap = boost::hana::second(v);
+                return accumulator + storageMap.size();
+            }
+        );
+        return totalSize;
     }
 
     vk::Instance vkInstance_;
