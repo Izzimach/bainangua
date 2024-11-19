@@ -84,3 +84,11 @@ In effect these are anonymous structs with named fields. What makes then differe
   type has fields named "instance" and "config".
 
 The Row Types used here are currently ```boost::hana::map```'s, built and modified at compile time.
+
+
+(Ab)using coroutines for high concurrency in resource loading and unloading
+-------
+
+The resource loader uses a task-based system where a thread pool grabs suspended tasks off a queue and runs them, using `libcoro::thread_pool`.
+Any code that loads or unloads a resource is a coroutine. This allows dependencies to be handled properly using `co_await`. For example is a texture
+loader needs to get an allocated buffer, it can `co_await` for the allocator. While waiting the texture loader is suspended and other tasks can be run.
