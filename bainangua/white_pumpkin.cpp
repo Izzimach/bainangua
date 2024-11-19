@@ -213,7 +213,7 @@ int main()
 	coro::sync_wait(coro2());
 
 	bainangua::bng_expected<bool> programResult =
-	bainangua::createVulkanContext(
+	bainangua::createVulkanContext<bainangua::bng_expected<bool>>(
 		bainangua::VulkanContextConfig{
 			.AppName = "My Test App",
 			.requiredExtensions = {
@@ -225,119 +225,98 @@ int main()
 #else
 			.useValidation = true,
 #endif
-			.innerCode = [=](bainangua::VulkanContext& s) -> bainangua::bng_expected<bool> {
-				/*auto stageRow = boost::hana::make_map(boost::hana::make_pair(BOOST_HANA_STRING("context"), s));
-				auto stages =
-					bainangua::PresentationLayerStage()
-					| bainangua::TexPipelineStage(SHADER_DIR)
-					| bainangua::SimpleGraphicsCommandPoolStage()
-					| bainangua::GPUIndexedVertexBufferStage(bainangua::indexedStaticTexVertices)
-					| bainangua::GPUIndexBufferStage()
-					| bainangua::CreateCombinedDescriptorPoolStage(bainangua::MultiFrameCount)
-					| bainangua::CreateCombinedDescriptorSetsStage(bainangua::MultiFrameCount)
-					| bainangua::CreateAndLinkUniformBuffersStage()
-					| bainangua::FromFileTextureImageStage(TEXTURES_DIR / std::filesystem::path("default.jpg"))
-					| bainangua::Basic2DSamplerStage()
-					| bainangua::LinkImageToDescriptorsStage()
-					| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
-					| bainangua::StandardMultiFrameLoop()
-					| UpdateUniformBuffer()
-					| bainangua::BasicRendering()
-					| DrawMVPIndexedGeometry();
+		},
+		[=](bainangua::VulkanContext& s) -> bainangua::bng_expected<bool> {
+			auto loaderDirectory = boost::hana::make_map(
+				boost::hana::make_pair(boost::hana::type_c<TestResourceStore<std::string, int>>,[]<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<std::string,int> key) -> bainangua::LoaderRoutine<int> {
+					std::cout << "int loader running\n";
 
-				return stages.applyRow(stageRow);*/
+					auto k1 = TestResourceStore<int, float>{ 1 };
+					auto k2 = TestResourceStore<int, float>{ 1 };
 
-				auto loaderDirectory = boost::hana::make_map(
-					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<std::string, int>>,[]<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<std::string,int> key) -> bainangua::LoaderRoutine<int> {
-						std::cout << "int loader running\n";
+					const auto results = co_await coro::when_all(loader.loadResource(k1), loader.loadResource(k2));
+					auto result1 = std::get<0>(results).return_value();
+					auto result2 = std::get<1>(results).return_value();
 
-						auto k1 = TestResourceStore<int, float>{ 1 };
-						auto k2 = TestResourceStore<int, float>{ 1 };
-
-						const auto results = co_await coro::when_all(loader.loadResource(k1), loader.loadResource(k2));
-						auto result1 = std::get<0>(results).return_value();
-						auto result2 = std::get<1>(results).return_value();
-
-						if (result1.has_value() && result2.has_value()) {
-							co_return bainangua::bng_expected<bainangua::LoaderResults<int>>(
-								{
-									.resource_ = static_cast<int>(result1.value() + result2.value()),
-									.unloader_ = []() -> coro::task<bainangua::bng_expected<void>> {
-										std::cout << "unloading int resource\n";
-										co_return{};
-									}()
-								}
-							);
-						}
-						else {
-							co_return bainangua::bng_unexpected<bainangua::LoaderResults<int>>("error loading dependencies");
-						}
-					}),
-					boost::hana::make_pair(boost::hana::type_c<TestResourceStore<int,float>>,[]<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<int,float> key) -> bainangua::LoaderRoutine<float> {
-						std::cout << "float loader running\n";
-						co_return bainangua::bng_expected<bainangua::LoaderResults<float>>(
+					if (result1.has_value() && result2.has_value()) {
+						co_return bainangua::bng_expected<bainangua::LoaderResults<int>>(
 							{
-								.resource_ = 3.0f + static_cast<float>(key.key),
+								.resource_ = static_cast<int>(result1.value() + result2.value()),
 								.unloader_ = []() -> coro::task<bainangua::bng_expected<void>> {
-									std::cout << "unloading float resource\n";
+									std::cout << "unloading int resource\n";
 									co_return{};
 								}()
 							}
 						);
-					})
-				);
-
-				auto loaderStorage = boost::hana::fold_left(
-					loaderDirectory,
-					boost::hana::make_map(),
-					[](auto accumulator, auto v) {
-						auto HanaKey = boost::hana::first(v);
-						using KeyType = typename decltype(HanaKey)::type;
-						using ResourceType = typename decltype(HanaKey)::type::resource_type;
-
-						// we'd like to use unique_ptr here but hana forces a copy somewhere internally
-						std::unordered_map<KeyType, std::shared_ptr<bainangua::SingleResourceStore<ResourceType>>> storage;
-
-						return boost::hana::insert(accumulator, boost::hana::make_pair(HanaKey, storage));
-					}
-				);
-
-				bainangua::bng_expected<bool> result{ true };
-
-				try {
-					std::shared_ptr<bainangua::ResourceLoader<decltype(loaderDirectory), decltype(loaderStorage)>> loader(std::make_shared<bainangua::ResourceLoader<decltype(loaderDirectory), decltype(loaderStorage)>>(s, loaderDirectory));
-					auto k = TestResourceStore<std::string, int>{ "argh" };
-					coro::task<bainangua::bng_expected<int>> loading1 = loader->loadResource(k);
-					bainangua::bng_expected<int> result1 = coro::sync_wait(loading1);
-					if (result1.has_value()) {
-						std::cout << "storage result: " << result1.value() << "\n";
 					}
 					else {
-						std::cout << "result error: " << result1.error() << "\n";
+						co_return bainangua::bng_unexpected<bainangua::LoaderResults<int>>("error loading dependencies");
 					}
+				}),
+				boost::hana::make_pair(boost::hana::type_c<TestResourceStore<int,float>>,[]<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>& loader, TestResourceStore<int,float> key) -> bainangua::LoaderRoutine<float> {
+					std::cout << "float loader running\n";
+					co_return bainangua::bng_expected<bainangua::LoaderResults<float>>(
+						{
+							.resource_ = 3.0f + static_cast<float>(key.key),
+							.unloader_ = []() -> coro::task<bainangua::bng_expected<void>> {
+								std::cout << "unloading float resource\n";
+								co_return{};
+							}()
+						}
+					);
+				})
+			);
 
-					// this should do cleanup
-					coro::sync_wait(loader->unloadResource(k));
+			auto loaderStorage = boost::hana::fold_left(
+				loaderDirectory,
+				boost::hana::make_map(),
+				[](auto accumulator, auto v) {
+					auto HanaKey = boost::hana::first(v);
+					using KeyType = typename decltype(HanaKey)::type;
+					using ResourceType = typename decltype(HanaKey)::type::resource_type;
+
+					// we'd like to use unique_ptr here but hana forces a copy somewhere internally
+					std::unordered_map<KeyType, std::shared_ptr<bainangua::SingleResourceStore<ResourceType>>> storage;
+
+					return boost::hana::insert(accumulator, boost::hana::make_pair(HanaKey, storage));
 				}
-				catch (vk::SystemError& err)
-				{
-					bainangua::bng_errorobject errorString;
-					std::format_to(std::back_inserter(errorString), "vk::SystemError: {}", err.what());
-					result = tl::make_unexpected(errorString);
+			);
+
+			bainangua::bng_expected<bool> result{ true };
+
+			try {
+				std::shared_ptr<bainangua::ResourceLoader<decltype(loaderDirectory), decltype(loaderStorage)>> loader(std::make_shared<bainangua::ResourceLoader<decltype(loaderDirectory), decltype(loaderStorage)>>(s, loaderDirectory));
+				auto k = TestResourceStore<std::string, int>{ "argh" };
+				coro::task<bainangua::bng_expected<int>> loading1 = loader->loadResource(k);
+				bainangua::bng_expected<int> result1 = coro::sync_wait(loading1);
+				if (result1.has_value()) {
+					std::cout << "storage result: " << result1.value() << "\n";
 				}
-				catch (std::exception& err)
-				{
-					bainangua::bng_errorobject errorString;
-					std::format_to(std::back_inserter(errorString), "std::exception: {}", err.what());
-					result = tl::make_unexpected(errorString);
+				else {
+					std::cout << "result error: " << result1.error() << "\n";
 				}
-				catch (...)
-				{
-					bainangua::bng_errorobject errorString("unknown error");
-					result = tl::make_unexpected(errorString);
-				}
-				return result;
+
+				// this should do cleanup
+				coro::sync_wait(loader->unloadResource(k));
 			}
+			catch (vk::SystemError& err)
+			{
+				bainangua::bng_errorobject errorString;
+				std::format_to(std::back_inserter(errorString), "vk::SystemError: {}", err.what());
+				result = tl::make_unexpected(errorString);
+			}
+			catch (std::exception& err)
+			{
+				bainangua::bng_errorobject errorString;
+				std::format_to(std::back_inserter(errorString), "std::exception: {}", err.what());
+				result = tl::make_unexpected(errorString);
+			}
+			catch (...)
+			{
+				bainangua::bng_errorobject errorString("unknown error");
+				result = tl::make_unexpected(errorString);
+			}
+			return result;
 		}
 	);
 

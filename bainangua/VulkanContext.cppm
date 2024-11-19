@@ -59,14 +59,13 @@ export struct VulkanContext {
 };
 
 
-export struct VulkanContextConfig {
+export
+struct VulkanContextConfig {
     std::string AppName{ "Vulkan App" };
     std::string EngineName{ "Default Vulkan Engine" };
     std::vector<std::string> requiredExtensions;
 
     bool useValidation;
-
-    std::function<bng_expected<bool>(VulkanContext&)> innerCode; //!< called once all the Vulkan handles are created for the VulkanContext
 };
 
 
@@ -100,8 +99,7 @@ ReturnObject doNothingEndFrame()
     }
 }
 
-
-static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT /*messageSeverity*/,
     VkDebugUtilsMessageTypeFlagsEXT /*messageType*/,
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
@@ -112,16 +110,15 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     return VK_FALSE;
 }
 
-static void framebufferResizeCallback(GLFWwindow* window, int /*width*/, int /*height*/) {
+void framebufferResizeCallback(GLFWwindow* window, int /*width*/, int /*height*/) {
     auto s = reinterpret_cast<bainangua::VulkanContext*>(glfwGetWindowUserPointer(window));
     if (s) s->windowResized = true;
 }
 
 
-template <typename Row>
-bng_expected<bool> invokeInnerCode(Row r)
+template <typename Row, typename Result>
+Result invokeInnerCode(Row r, std::function<typename Result(VulkanContext&)> innerCode)
 {
-    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig>, "Row must have field named 'config'");
     static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>, "Row must have field named 'instance'");
     static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("glfwWindow"), GLFWwindow*>, "Row must have field named 'glfwWindow'");
     static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("physicalDevice"), vk::PhysicalDevice>, "Row must have field named 'physicalDevice'");
@@ -145,14 +142,14 @@ bng_expected<bool> invokeInnerCode(Row r)
     vk::Queue presentQueue            = boost::hana::at_key(r, BOOST_HANA_STRING("presentQueue"));
     VmaAllocator graphicsAllocator    = boost::hana::at_key(r, BOOST_HANA_STRING("vmaAllocator"));
 
-    bng_expected<bool> result;
+    Result result;
     try
     {
         VulkanContext vkState{ instance, window, physicalDevice, device, surface, graphicsQueueFamilyIndex, graphicsQueue, presentQueueFamilyIndex, presentQueue, doNothingEndFrame(), graphicsAllocator, false };
         glfwSetWindowUserPointer(window, &vkState);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
-        result = config.innerCode(vkState);
+        result = innerCode(vkState);
         glfwSetWindowUserPointer(window, nullptr);
     }
     catch (vk::SystemError& err)
@@ -176,12 +173,17 @@ bng_expected<bool> invokeInnerCode(Row r)
     return result;
 }
 
+template <typename Result>
 struct InvokeInnerCode {
+    InvokeInnerCode(std::function<typename Result(VulkanContext&)> c) : innercode_(c) {}
+
+    std::function<typename Result(VulkanContext&)> innercode_;
+
     using row_tag = RowType::RowFunctionTag;
-    using return_type = bng_expected<bool>;
+    using return_type = Result;
 
     template<typename Row>
-    constexpr bng_expected<bool> applyRow(Row r) { return invokeInnerCode(r); }
+    constexpr Result applyRow(Row r) { return invokeInnerCode(r, innercode_); }
 };
 
 struct StandardVMAAllocator {
@@ -421,7 +423,6 @@ struct StandardVulkanInstance {
 
     template <typename RowFunction, typename Row>
     constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-        static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig>, "Row must have field named 'config'");
         const VulkanContextConfig& config = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
 
         std::vector<std::string> totalExtensions = config.requiredExtensions;
@@ -445,20 +446,19 @@ struct StandardVulkanInstance {
             std::cout << std::format("supported: {}\n", prop.extensionName.operator std::string());
         }
 
+        std::vector<vk::LayerProperties> vulkanLayers = vk::enumerateInstanceLayerProperties();
+        std::string validationString("VK_LAYER_KHRONOS_validation");
+        auto validates = std::ranges::find_if(vulkanLayers, [&](vk::LayerProperties p) { std::string s = p.layerName; return s == validationString; });
+        if (validates == vulkanLayers.end()) {
+            return tl::make_unexpected("Vulkan layers do not contain VK_LAYER_KHRONOS_validation");
+        }
+
         // check validation layers
         std::vector<const char*> totalLayers;
         if (config.useValidation) {
             totalLayers.emplace_back("VK_LAYER_KHRONOS_validation");
         }
-
-        std::vector<vk::LayerProperties> vulkanLayers = vk::enumerateInstanceLayerProperties();
-        auto validationLayers = vulkanLayers
-            | std::views::transform([](vk::LayerProperties p) { std::string s = p.layerName; return s; })
-            | std::views::filter([](std::string n) { return n == std::string("VK_LAYER_KHRONOS_validation"); });
-        if (validationLayers.empty()) {
-            return tl::make_unexpected("Vulkan layers do not contain VK_LAYER_KHRONOS_validation");
-        }
-
+        
         // create an Instance
         vk::ApplicationInfo applicationInfo(config.AppName.c_str(), 1, config.EngineName.c_str(), 1, VK_API_VERSION_1_2);
         vk::InstanceCreateInfo instanceCreateInfo({}, &applicationInfo, totalLayers, rawExtensionStrings);
@@ -505,7 +505,6 @@ struct GLFWOuterWrapper {
 
     template <typename RowFunction, typename Row>
     constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-        static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig>, "Row must have field named 'config'");
         const VulkanContextConfig &config = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
 
         glfwInit();
@@ -546,7 +545,8 @@ struct GLFWOuterWrapper {
 };
 
 export
-auto createVulkanContext(const VulkanContextConfig& config) -> bng_expected<bool>
+template <typename Result>
+auto createVulkanContext(const VulkanContextConfig& config, std::function<typename Result(VulkanContext &)> innerCode) -> typename Result
 {
     auto configRow = boost::hana::make_map(boost::hana::make_pair(BOOST_HANA_STRING("config"), config));
 
@@ -557,7 +557,7 @@ auto createVulkanContext(const VulkanContextConfig& config) -> bng_expected<bool
         | CreateGLFWWindowAndSurface()
         | StandardDevice() 
         | StandardVMAAllocator() 
-        | InvokeInnerCode();
+        | InvokeInnerCode<Result>(innerCode);
 
     return vulkanStages.applyRow(configRow);
 }
