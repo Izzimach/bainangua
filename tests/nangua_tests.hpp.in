@@ -15,7 +15,8 @@ import VulkanContext;
 #define TEXTURES_DIR ASSETS_DIR "/textures"
 
 
-inline auto wrapRenderLoop(std::string_view name, std::function<bool(bainangua::VulkanContext&)> renderLoop) -> bainangua::bng_expected<bool> {
+template <typename Result>
+inline auto wrapRenderLoop(std::string_view name, std::function<typename Result(bainangua::VulkanContext&)> renderLoop) -> typename Result {
 	return bainangua::createVulkanContext(
 		bainangua::VulkanContextConfig{
 			.AppName = std::string(name),
@@ -25,22 +26,21 @@ inline auto wrapRenderLoop(std::string_view name, std::function<bool(bainangua::
 					VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
 			},
 			.useValidation = false,
-			.innerCode = renderLoop
-		}
+		},
+		renderLoop
 	);
 }
 
 template <typename RowFunction>
-auto wrapRenderLoopRow(std::string_view name, RowFunction f) -> bainangua::bng_expected<bool> {
-	return wrapRenderLoop(
+auto wrapRenderLoopRow(std::string_view name, RowFunction f) -> typename RowFunction::return_type {
+	return wrapRenderLoop<RowFunction::return_type>(
 		name,
-		[&](bainangua::VulkanContext& s) -> bool {
+		[&](bainangua::VulkanContext& s) -> typename RowFunction::return_type {
 			auto r = boost::hana::make_map(
 				boost::hana::make_pair(BOOST_HANA_STRING("context"), s),
 				boost::hana::make_pair(BOOST_HANA_STRING("device"), s.vkDevice)
 			);
-			auto result = f.applyRow(r);
-			return true;
+			return f.applyRow(r);
 		}
 	);
 }

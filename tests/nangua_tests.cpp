@@ -147,7 +147,7 @@ struct UpdateUniformBuffer {
 TEST_CASE("VulkanContext", "[Basic]")
 {
 	REQUIRE(
-		wrapRenderLoopRow("Basic Test", NoRenderLoop()) == bainangua::bng_expected<bool>(true)
+		wrapRenderLoopRow("Basic Test", NoRenderLoop()) == bainangua::bng_expected<int>(0)
 	);
 }
 
@@ -158,7 +158,7 @@ TEST_CASE("PresentationLayer", "[Basic]")
 			"PresentationLayer Pipeline Test App", 
 			bainangua::PresentationLayerStage() | NoRenderLoop()
 		)
-		== bainangua::bng_expected<bool>(true)
+		== bainangua::bng_expected<int>(0)
 	);
 }
 

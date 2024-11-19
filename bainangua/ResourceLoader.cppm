@@ -160,6 +160,8 @@ public:
     void operator=(ResourceLoader&&) = delete;
 
     ~ResourceLoader() {
+        // w
+        coro::sync_wait(autoTasks.garbage_collect_and_yield_until_empty());
         tp->shutdown();
         std::cout << "ResourceLoader destructor\n";
     }
@@ -184,7 +186,6 @@ public:
             auto resourceIter = specificStorage.find(key);
 
             if (resourceIter != specificStorage.end()) {
-                std::cout << "Already loading resource, waiting...\n";
                 SingleResourceStore<LookupKey::resource_type>* resourceStore = resourceIter->second.get();
                 {
                     coro::scoped_lock resourceLock = co_await resourceStore->resourceMutex_.lock();
