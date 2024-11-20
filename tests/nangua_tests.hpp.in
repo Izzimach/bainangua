@@ -33,7 +33,7 @@ inline auto wrapRenderLoop(std::string_view name, std::function<typename Result(
 
 template <typename RowFunction>
 auto wrapRenderLoopRow(std::string_view name, RowFunction f) -> typename RowFunction::return_type {
-	return wrapRenderLoop<RowFunction::return_type>(
+	return wrapRenderLoop<typename RowFunction::return_type>(
 		name,
 		[&](bainangua::VulkanContext& s) -> typename RowFunction::return_type {
 			auto r = boost::hana::make_map(

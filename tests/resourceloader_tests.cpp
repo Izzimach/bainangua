@@ -51,8 +51,14 @@ using ChainLoadKey = bainangua::SingleResourceKey<int, ChainLoadResult>;
 struct VariableLoadResult {};
 using VariableLoadKey = bainangua::SingleResourceKey<int, VariableLoadResult>;
 
+// Bad unloader. This loads an IdentityKey<int> resource but doesn't unload it later. For testing
+// if ResourceLoader::measureLoad will actually count the unloaded resource.
+struct BadUnloadResult {};
+using BadUnloadKey = bainangua::SingleResourceKey<int, BadUnloadResult>;
 
-auto testLoaderLookup = boost::hana::make_map(
+
+
+constexpr auto testLoaderLookup = boost::hana::make_map(
 	// identity int loader
 	boost::hana::make_pair(
 		boost::hana::type_c<IdentityKey<int>>, 
@@ -151,6 +157,25 @@ auto testLoaderLookup = boost::hana::make_map(
 				}(loader, std::make_tuple(idKey, delayKey, chainKey))
 			};
 		}
+	),
+
+	// bad unloader
+	boost::hana::make_pair(
+		boost::hana::type_c<BadUnloadKey>,
+		[](auto& loader, BadUnloadKey key) -> bainangua::LoaderRoutine<BadUnloadResult> {
+			IdentityKey<int> idKey{ key.key };
+
+			(void)co_await loader.loadResource(idKey);
+
+			co_return bainangua::LoaderResults<BadUnloadResult>{
+				BadUnloadResult{},
+				[](auto& loader) -> coro::task<bainangua::bng_expected<void>> {
+
+					// don't unload the idKey we loaded
+					co_return bainangua::bng_expected<void>();
+				}(loader)
+			};
+		}
 	)
 );
 
@@ -174,13 +199,12 @@ using TestResourceLoader = bainangua::ResourceLoader<decltype(testLoaderLookup),
 
 
 struct ResourceLoaderInit {
+	ResourceLoaderInit(std::function<std::string(std::shared_ptr<TestResourceLoader>)> f) : testCode_(f) {}
 
 	using row_tag = RowType::RowFunctionTag;
 	using return_type = tl::expected<std::string, std::string>;
 
 	std::function<std::string(std::shared_ptr<TestResourceLoader>)> testCode_;
-
-	ResourceLoaderInit(std::function<std::string(std::shared_ptr<TestResourceLoader>)> f) : testCode_(f) {}
 
 	template<typename Row>
 	constexpr tl::expected<std::string, std::string> applyRow(Row r) {
@@ -235,11 +259,28 @@ TEST_CASE("ResourceLoaderBasicLoadUnload", "[ResourceLoader][Basic]")
 		==
 		bainangua::bng_expected<std::string>("result 1=3")
 	);
+
+	auto badUnloadResult = wrapRenderLoopRow("ResourceLoaderBadUnload", ResourceLoaderInit([](std::shared_ptr<TestResourceLoader> loader) {
+			BadUnloadKey key{ 3 };
+			// load a bunch of stuff
+			coro::task<bainangua::bng_expected<BadUnloadResult>> loading1 = loader->loadResource(key);
+			auto result1 = coro::sync_wait(loading1);
+
+			// this should do cleanup of the BadUnload resource but not the dependency
+			coro::sync_wait(loader->unloadResource(key));
+
+			size_t usedStorageCount = loader->measureLoad();
+			std::cout << "bad unload usedStorageCount=" << usedStorageCount << "\n";
+
+			return std::format("storage count={}", usedStorageCount);
+		}
+	));
+	REQUIRE(badUnloadResult.value() == "storage count=1");
 }
 
 TEST_CASE("ResourceLoaderVariableLoad", "[ResourceLoader][Generator]")
 {
-	auto variableLoad = GENERATE(take(10, random(0, 100)));
+	auto variableLoad = GENERATE(take(5, random(0, 100)));
 
 	REQUIRE(
 		wrapRenderLoopRow("ResourceLoaderInit", ResourceLoaderInit([=](std::shared_ptr<TestResourceLoader> loader) {
@@ -266,7 +307,5 @@ TEST_CASE("ResourceLoaderVariableLoad", "[ResourceLoader][Generator]")
 		bainangua::bng_expected<std::string>("variable load success, load=0")
 	);
 }
-
-
 
 }

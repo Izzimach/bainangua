@@ -90,7 +90,7 @@ export struct PresentationLayer
 	        swapChainImageCount_(swapChainImageCount), imageAvailableSemaphores_(imageAvailableSemaphores), renderFinishedSemaphores_(renderFinishedSemaphores),
 		    inFlightFences_(inFlightFences), swapChainImages_(swapChainImages), swapChainImageViews_(swapChainImageViews), swapChainFramebuffers_(swapChainFramebuffers)
 			{}
-	~PresentationLayer() {}
+	~PresentationLayer() { teardown(); }
 
 	void teardown();
 	void teardownFramebuffers();
@@ -259,6 +259,7 @@ void PresentationLayer::teardown()
 		swapChainImageViews_ = bng_array<vk::ImageView>();
 
 		swapChainDevice_.destroySwapchainKHR(swapChain_);
+		swapChain_ = VK_NULL_HANDLE;
 	}
 }
 
