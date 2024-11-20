@@ -179,20 +179,7 @@ constexpr auto testLoaderLookup = boost::hana::make_map(
 	)
 );
 
-auto testLoaderStorage = boost::hana::fold_left(
-	testLoaderLookup,
-	boost::hana::make_map(),
-	[](auto accumulator, auto v) {
-		auto HanaKey = boost::hana::first(v);
-		using KeyType = typename decltype(HanaKey)::type;
-		using ResourceType = typename decltype(HanaKey)::type::resource_type;
-
-		// we'd like to use unique_ptr here but hana forces a copy somewhere internally
-		std::unordered_map<KeyType, std::shared_ptr<bainangua::SingleResourceStore<ResourceType>>> storage;
-
-		return boost::hana::insert(accumulator, boost::hana::make_pair(HanaKey, storage));
-	}
-);
+auto testLoaderStorage = bainangua::createLoaderStorage(testLoaderLookup);
 
 using TestResourceLoader = bainangua::ResourceLoader<decltype(testLoaderLookup), decltype(testLoaderStorage)>;
 
@@ -236,8 +223,7 @@ struct ResourceLoaderInit {
 	
 TEST_CASE("ResourceLoaderBasicLoadUnload", "[ResourceLoader][Basic]")
 {
-	REQUIRE(
-		wrapRenderLoopRow("ResourceLoaderInit", ResourceLoaderInit([](std::shared_ptr<TestResourceLoader> loader) {
+	auto initResult = wrapRenderLoopRow("ResourceLoaderInit", ResourceLoaderInit([](std::shared_ptr<TestResourceLoader> loader) {
 			// load a bunch of stuff
 			coro::task<bainangua::bng_expected<int>> loading1 = loader->loadResource(IdentityKey<int>(3));
 			bainangua::bng_expected<int> result1 = coro::sync_wait(loading1);
@@ -254,11 +240,9 @@ TEST_CASE("ResourceLoaderBasicLoadUnload", "[ResourceLoader][Basic]")
 			coro::sync_wait(loader->unloadResource(ChainLoadKey(5)));
 
 			return std::format("result 1={}", result1.value());
-			}
-		))
-		==
-		bainangua::bng_expected<std::string>("result 1=3")
-	);
+		}
+	));
+	REQUIRE(initResult == "result 1=3");
 
 	auto badUnloadResult = wrapRenderLoopRow("ResourceLoaderBadUnload", ResourceLoaderInit([](std::shared_ptr<TestResourceLoader> loader) {
 			BadUnloadKey key{ 3 };

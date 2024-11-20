@@ -52,7 +52,7 @@ export
 template <typename ResourceType>
 using LoaderRoutine = coro::task<bainangua::bng_expected<LoaderResults<ResourceType>>>;
 
-export
+
 template <typename ResourceType>
 struct SingleResourceStore {
     SingleResourceStore(size_t refCount = 0) 
@@ -320,6 +320,57 @@ private:
 
     coro::task_container<coro::thread_pool> autoTasks;
 };
+
+
+export
+template <typename LoaderDirectoryType>
+auto createLoaderStorage(LoaderDirectoryType loaderDirectory) {
+    return
+        boost::hana::fold_left(
+            loaderDirectory,
+            boost::hana::make_map(),
+            [](auto accumulator, auto v) {
+                auto HanaKey = boost::hana::first(v);
+                using KeyType = typename decltype(HanaKey)::type;
+                using ResourceType = typename decltype(HanaKey)::type::resource_type;
+
+                // we'd like to use unique_ptr here but hana forces a copy somewhere internally
+                std::unordered_map<KeyType, std::shared_ptr<bainangua::SingleResourceStore<ResourceType>>> storage;
+
+                return boost::hana::insert(accumulator, boost::hana::make_pair(HanaKey, storage));
+            }
+        );
+}
+
+export
+template <typename LoaderDirectory>
+struct ResourceLoaderStage {
+    ResourceLoaderStage(LoaderDirectory directory) : directory_(directory) {}
+
+    LoaderDirectory directory_;
+
+    using row_tag = RowType::RowWrapperTag;
+
+    template <typename WrappedReturnType>
+    using return_type_transformer = WrappedReturnType;
+
+    template <typename RowFunction, typename Row>
+    constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+        VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+
+        auto loaderStorage = createLoaderStorage(directory_);
+
+        using LoaderType = ResourceLoader<LoaderDirectory, decltype(loaderStorage)>;
+
+        std::shared_ptr<LoaderType> loaderptr(std::make_shared<LoaderType>(context, directory_));
+
+        auto rWithResourceLoader = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("resourceLoader"), loaderptr));
+        auto result = f.applyRow(rWithResourceLoader);
+        return result;
+    }
+};
+
+
 
 }
 
