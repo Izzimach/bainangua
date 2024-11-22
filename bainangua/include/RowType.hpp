@@ -1,4 +1,4 @@
-﻿
+﻿#pragma once
 
 #include <boost/hana/assert.hpp>
 #include <boost/hana/contains.hpp>
