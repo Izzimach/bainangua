@@ -61,7 +61,7 @@ export auto shaderLoader = boost::hana::make_pair(
 	boost::hana::type_c<ShaderFileKey>,
 	[]<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>&loader, ShaderFileKey filekey) -> bainangua::LoaderRoutine<vk::ShaderModule> {
 		std::vector<char> shaderCode = readFile(filekey.key);
-		vk::ShaderModule shaderModule = createShaderModule(loader.vkDevice_, shaderCode);
+		vk::ShaderModule shaderModule = createShaderModule(loader.context_.vkDevice, shaderCode);
 
 		co_return bainangua::bng_expected<bainangua::LoaderResults<vk::ShaderModule>>(
 			{
@@ -69,7 +69,7 @@ export auto shaderLoader = boost::hana::make_pair(
 				.unloader_ = [](vk::Device device, vk::ShaderModule s) -> coro::task<bainangua::bng_expected<void>> {
 					device.destroyShaderModule(s);
 					co_return{};
-				}(loader.vkDevice_, shaderModule)
+				}(loader.context_.vkDevice, shaderModule)
 			}
 		);
 	}

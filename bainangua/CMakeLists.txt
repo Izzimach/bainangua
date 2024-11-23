@@ -6,7 +6,7 @@ find_package(immer REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(Vulkan REQUIRED)
 find_package(VulkanMemoryAllocator REQUIRED)
-find_package(Boost REQUIRED COMPONENTS hana)
+find_package(Boost REQUIRED COMPONENTS hana container_hash)
 find_package(glm REQUIRED)
 
 # vcpkg version of gtl doesn't use the normal CMake packaging...
@@ -47,7 +47,7 @@ target_sources(bainangua
     TYPE CXX_MODULES 
     FILES "OneFrame.cppm" "VulkanContext.cppm" "PresentationLayer.cppm" "Pipeline.cppm" "Commands.cppm"
           "VertexBuffer.cppm" "UniformBuffer.cppm" "DescriptorSets.cppm" "TextureImage.cppm"
-          "resources/ResourceLoader.cppm" "resources/Shader.cppm")
+          "resources/ResourceLoader.cppm" "resources/Shader.cppm" "resources/CommandBuffer.cppm")
 
 
 target_include_directories(bainangua PUBLIC

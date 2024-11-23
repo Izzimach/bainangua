@@ -3,6 +3,7 @@ module;
 #include "bainangua.hpp"
 #include "RowType.hpp"
 
+#include <boost/container_hash/hash.hpp>
 #include <boost/hana/assert.hpp>
 #include <boost/hana/contains.hpp>
 #include <boost/hana/at_key.hpp>
@@ -39,6 +40,14 @@ export
 template <typename LookupType, typename ResourceType>
 constexpr bool operator==(const SingleResourceKey<LookupType, ResourceType>& a, const SingleResourceKey<LookupType, ResourceType>& b) {
     return a.key == b.key;
+}
+
+export
+template <typename LookupType, typename ResourceType>
+std::size_t hash_value(SingleResourceKey<LookupType, ResourceType> const& r)
+{
+    boost::hash<LookupType> hasher;
+    return hasher(r.key);
 }
 
 export
@@ -94,61 +103,11 @@ template <typename LoaderDirectory, typename LoaderStorage>
 class ResourceLoader
 {
 public:
-    template <typename Row>
-    ResourceLoader(Row r, LoaderDirectory loaders)
-        : vkInstance_(boost::hana::at_key(r, BOOST_HANA_STRING("instance"))),
-        vkDevice_(boost::hana::at_key(r, BOOST_HANA_STRING("device"))),
-        vkPhysicalDevice_(boost::hana::at_key(r, BOOST_HANA_STRING("physicalDevice"))),
-        vmaAllocator_(boost::hana::at_key(r, BOOST_HANA_STRING("vmaAllocator"))),
-        loaders_(loaders),
-        tp(std::make_shared<coro::thread_pool>(
-            coro::thread_pool::options{
-                // By default all thread pools will create its thread count with the
-                // std::thread::hardware_concurrency() as the number of worker threads in the pool,
-                // but this can be changed via this thread_count option.  This example will use 4.
-                .thread_count = 4,
-                // Upon starting each worker thread an optional lambda callback with the worker's
-                // index can be called to make thread changes, perhaps priority or change the thread's
-                // name.
-                .on_thread_start_functor = [](std::size_t worker_idx) -> void {
-                    std::cout << "thread pool worker " << worker_idx << " is starting up.\n";
-                },
-                // Upon stopping each worker thread an optional lambda callback with the worker's
-                // index can b called.
-                .on_thread_stop_functor = [](std::size_t worker_idx) -> void {
-                    std::cout << "thread pool worker " << worker_idx << " is shutting down.\n";
-                }
-            }
-        )),
-        autoTasks(tp)
-    {}
-
     ResourceLoader(VulkanContext& context, LoaderDirectory loaders)
-        : vkInstance_(context.vkInstance),
-        vkDevice_(context.vkDevice),
-        vkPhysicalDevice_(context.vkPhysicalDevice),
-        vmaAllocator_(context.vmaAllocator),
+        : context_(context),
         loaders_(loaders),
-        tp(std::make_shared<coro::thread_pool>(
-            coro::thread_pool::options{
-                // By default all thread pools will create its thread count with the
-                // std::thread::hardware_concurrency() as the number of worker threads in the pool,
-                // but this can be changed via this thread_count option.  This example will use 4.
-                .thread_count = 4,
-                // Upon starting each worker thread an optional lambda callback with the worker's
-                // index can be called to make thread changes, perhaps priority or change the thread's
-                // name.
-                .on_thread_start_functor = [](std::size_t worker_idx) -> void {
-                    std::cout << "thread pool worker " << worker_idx << " is starting up.\n";
-                },
-                // Upon stopping each worker thread an optional lambda callback with the worker's
-                // index can b called.
-                .on_thread_stop_functor = [](std::size_t worker_idx) -> void {
-                    std::cout << "thread pool worker " << worker_idx << " is shutting down.\n";
-                }
-            }
-        )),
-        autoTasks(tp)
+        tp_(std::make_shared<coro::thread_pool>(coro::thread_pool::options{.thread_count = 4})),
+        autoTasks_(tp_)
     {}
 
     ResourceLoader(ResourceLoader const&) = delete;
@@ -161,14 +120,14 @@ public:
 
     ~ResourceLoader() {
         // some unloads might still be queued, wait for them to finish
-        coro::sync_wait(autoTasks.garbage_collect_and_yield_until_empty());
-        tp->shutdown();
+        coro::sync_wait(autoTasks_.garbage_collect_and_yield_until_empty());
+        tp_->shutdown();
         std::cout << "ResourceLoader destructor\n";
     }
 
     size_t measureLoad() {
         // wait for unloads to finish
-        coro::sync_wait(autoTasks.garbage_collect_and_yield_until_empty());
+        coro::sync_wait(autoTasks_.garbage_collect_and_yield_until_empty());
         size_t totalSize = boost::hana::fold_left(storage_,
             0,
             [](auto accumulator, auto v) {
@@ -179,10 +138,7 @@ public:
         return totalSize;
     }
 
-    vk::Instance vkInstance_;
-    vk::Device   vkDevice_;
-    vk::PhysicalDevice vkPhysicalDevice_;
-    VmaAllocator vmaAllocator_;
+    VulkanContext context_;
     LoaderDirectory loaders_;
     LoaderStorage storage_;
     
@@ -190,7 +146,11 @@ public:
     // relevant resource.
     coro::mutex storage_mutex_;
 
+private:
+    std::shared_ptr<coro::thread_pool> tp_;
+    coro::task_container<coro::thread_pool> autoTasks_;
 
+public:
     template <typename LookupKey>
     auto loadResource(LookupKey key) -> coro::task<bng_expected<typename LookupKey::resource_type>> {
         return [](ResourceLoader* self, LookupKey key) -> coro::task<bng_expected<typename LookupKey::resource_type>> {
@@ -250,7 +210,7 @@ public:
             storePtr->loadedEvent_.set();
             co_return;
         };
-        autoTasks.start(loadAndGo(this, key, storePtr));
+        autoTasks_.start(loadAndGo(this, key, storePtr));
     }
 
     template <typename LookupKey>
@@ -283,7 +243,7 @@ public:
                         coro::task<bng_expected<void>> unloaderTask = std::move(resourceStore->unloader_.value());
                         resourceStore->unloader_ = std::nullopt;
 
-                        self->autoTasks.start([](ResourceLoader* self, LookupKey key, std::shared_ptr<SingleResourceStore<LookupKey::resource_type>> resourceStore, auto t) -> coro::task<void> {
+                        self->autoTasks_.start([](ResourceLoader* self, LookupKey key, std::shared_ptr<SingleResourceStore<LookupKey::resource_type>> resourceStore, auto t) -> coro::task<void> {
                             auto result = co_await t;
 
                             // the resource is fully unloaded.
@@ -315,10 +275,6 @@ public:
         }(this, key);
     }
 
-private:
-    std::shared_ptr<coro::thread_pool> tp;
-
-    coro::task_container<coro::thread_pool> autoTasks;
 };
 
 

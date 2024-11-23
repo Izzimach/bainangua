@@ -76,7 +76,7 @@ constexpr auto testLoaderLookup = boost::hana::make_map(
 			std::cout << "delay loader running\n";
 
 			// we don't want the delay to be too long, or <0
-			float delay = std::clamp(key.key, 0.0f, 10.0f);
+			float delay = std::clamp(key.key, 0.0f, 5.0f);
 
 			std::this_thread::sleep_for(std::chrono::duration<float>(delay));
 
@@ -134,7 +134,7 @@ constexpr auto testLoaderLookup = boost::hana::make_map(
 				co_await loader.loadResource(idKey.value());
 			}
 			if (keyValue & 2) {
-				delayKey = DelayKey{ static_cast<float>(keyValue) * 0.1f };
+				delayKey = DelayKey{ static_cast<float>(keyValue & 0x000f) * 0.1f };
 				co_await loader.loadResource(delayKey.value());
 			}
 			if (keyValue & 4) {
