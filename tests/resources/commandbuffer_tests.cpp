@@ -21,72 +21,76 @@ import VulkanContext;
 import ResourceLoader;
 import CommandBuffer;
 
-constexpr auto testLoaderLookup = boost::hana::make_map(
-	bainangua::commandPoolLoader,
-	bainangua::commandBufferLoader
-);
 
-auto testLoaderStorage = bainangua::createLoaderStorage(testLoaderLookup);
-
-using TestResourceLoader = bainangua::ResourceLoader<decltype(testLoaderLookup), decltype(testLoaderStorage)>;
-
-auto testWrapper = std::function(wrapResourceLoader<decltype(testLoaderLookup), decltype(testLoaderStorage)>);
-
-TEST_CASE("ResourceLoaderCommandBuffer", "[ResourceLoader][CommandBuffer]")
+TEST_CASE("ResourceLoaderCommands", "[ResourceLoader][Commands]")
 {
-	auto testResult =
-		testWrapper("ResourceLoaderCommandBuffer", testLoaderLookup, [=](std::shared_ptr<TestResourceLoader> loader) {
-				bainangua::StdCommandBufferKey key{
-					.sourcePool = bainangua::StdCommandPoolKey{bainangua::MainDrawPool{loader->context_.graphicsQueueFamilyIndex}},
-					.resettable = false,
-					.index = 0
-				};
-				bainangua::bng_expected<vk::CommandBuffer> result1 = coro::sync_wait(loader->loadResource(key));
+	constexpr auto testLoaderLookup = boost::hana::make_map(
+		bainangua::commandPoolLoader,
+		bainangua::commandBufferLoader
+	);
 
-				if (!result1) {
-					return std::string("command buffer load failed");
-				}
+	auto testLoaderStorage = bainangua::createLoaderStorage(testLoaderLookup);
 
-				// there should be two resources loaded, the command buffer and the command pool
-				size_t loadedCount = loader->measureLoad();
+	using TestResourceLoader = bainangua::ResourceLoader<decltype(testLoaderLookup), decltype(testLoaderStorage)>;
 
-				// this should unload everything that was loaded
-				coro::sync_wait(loader->unloadResource(key));
+	auto testWrapper = std::function(wrapResourceLoader<decltype(testLoaderLookup), decltype(testLoaderStorage)>);
 
-				// is there anything still loaded? should be 0
-				size_t unloadedCount = loader->measureLoad();
+	SECTION("command buffers also load a command pool") {
+		auto testResult =
+			testWrapper("ResourceLoaderCommandBuffer", testLoaderLookup, [=](std::shared_ptr<TestResourceLoader> loader) {
+			bainangua::StdCommandBufferKey key{
+				.sourcePool = bainangua::StdCommandPoolKey{bainangua::MainDrawPool{loader->context_.graphicsQueueFamilyIndex}},
+				.resettable = false,
+				.index = 0
+			};
+			bainangua::bng_expected<vk::CommandBuffer> result1 = coro::sync_wait(loader->loadResource(key));
 
-				return std::format("command buffer load success, loaded={} unloaded={}", loadedCount, unloadedCount);
+			if (!result1) {
+				return std::string("command buffer load failed");
 			}
-		);
-	REQUIRE(testResult == "command buffer load success, loaded=2 unloaded=0");
 
-	auto sharedPoolResult =
-		testWrapper("ResourceLoaderCommandBuffer", testLoaderLookup, [=](std::shared_ptr<TestResourceLoader> loader) {
-				bainangua::StdCommandPoolKey poolKey(bainangua::MainDrawPool{loader->context_.graphicsQueueFamilyIndex});
-				bainangua::StdCommandBufferKey key1{ poolKey, false, 0 };
-				bainangua::StdCommandBufferKey key2{ poolKey, false, 1 };
+			// there should be two resources loaded, the command buffer and the command pool
+			size_t loadedCount = loader->measureLoad();
 
-				bainangua::bng_expected<vk::CommandBuffer> result1 = coro::sync_wait(loader->loadResource(key1));
-				bainangua::bng_expected<vk::CommandBuffer> result2 = coro::sync_wait(loader->loadResource(key2));
+			// this should unload everything that was loaded
+			coro::sync_wait(loader->unloadResource(key));
 
-				if (!result1 || !result2) {
-					return std::string("command buffer load failed");
+			// is there anything still loaded? should be 0
+			size_t unloadedCount = loader->measureLoad();
+
+			return std::format("command buffer load success, loaded={} unloaded={}", loadedCount, unloadedCount);
 				}
+			);
+		REQUIRE(testResult == "command buffer load success, loaded=2 unloaded=0");
+	}
 
-				// there should be three resources loaded, the two command buffers and the command pool
-				size_t loadedCount = loader->measureLoad();
+	SECTION("two command buffers with the same pool key share a command pool") {
+		auto sharedPoolResult =
+			testWrapper("ResourceLoaderCommandBuffer", testLoaderLookup, [=](std::shared_ptr<TestResourceLoader> loader) {
+			bainangua::StdCommandPoolKey poolKey(bainangua::MainDrawPool{ loader->context_.graphicsQueueFamilyIndex });
+			bainangua::StdCommandBufferKey key1{ poolKey, false, 0 };
+			bainangua::StdCommandBufferKey key2{ poolKey, false, 1 };
 
-				// this should unload everything that was loaded
-				coro::sync_wait(loader->unloadResource(key1));
-				coro::sync_wait(loader->unloadResource(key2));
+			bainangua::bng_expected<vk::CommandBuffer> result1 = coro::sync_wait(loader->loadResource(key1));
+			bainangua::bng_expected<vk::CommandBuffer> result2 = coro::sync_wait(loader->loadResource(key2));
 
-				// is there anything still loaded? should be 0
-				size_t unloadedCount = loader->measureLoad();
-
-				return std::format("shared command pool load success, loaded={} unloaded={}", loadedCount, unloadedCount);
+			if (!result1 || !result2) {
+				return std::string("command buffer load failed");
 			}
-		);
-	REQUIRE(sharedPoolResult == "shared command pool load success, loaded=3 unloaded=0");
 
+			// there should be three resources loaded, the two command buffers and the command pool
+			size_t loadedCount = loader->measureLoad();
+
+			// this should unload everything that was loaded
+			coro::sync_wait(loader->unloadResource(key1));
+			coro::sync_wait(loader->unloadResource(key2));
+
+			// is there anything still loaded? should be 0
+			size_t unloadedCount = loader->measureLoad();
+
+			return std::format("shared command pool load success, loaded={} unloaded={}", loadedCount, unloadedCount);
+				}
+			);
+		REQUIRE(sharedPoolResult == "shared command pool load success, loaded=3 unloaded=0");
+	}
 }

@@ -291,7 +291,7 @@ auto createLoaderStorage(LoaderDirectoryType loaderDirectory) {
                 using ResourceType = typename decltype(HanaKey)::type::resource_type;
 
                 // we'd like to use unique_ptr here but hana forces a copy somewhere internally
-                std::unordered_map<KeyType, std::shared_ptr<bainangua::SingleResourceStore<ResourceType>>> storage;
+                std::unordered_map<KeyType, std::shared_ptr<bainangua::SingleResourceStore<ResourceType>>, boost::hash<KeyType>> storage;
 
                 return boost::hana::insert(accumulator, boost::hana::make_pair(HanaKey, storage));
             }
@@ -340,24 +340,3 @@ struct boost::hana::hash_impl<bainangua::SingleResourceTag> {
     }
 };
 
-
-namespace std {
-
-    export
-    template <typename LookupType, typename ResourceType>
-    struct hash<bainangua::SingleResourceKey<LookupType, ResourceType>> {
-        constexpr size_t operator()(bainangua::SingleResourceKey<LookupType, ResourceType> s) {
-            hash<decltype(s.key)> hasher;
-            return hasher(s.key);
-        }
-        constexpr size_t operator()(const bainangua::SingleResourceKey<LookupType, ResourceType>& s) const {
-            hash<decltype(s.key)> hasher;
-            return hasher(s.key);
-        }
-        constexpr size_t operator()(const bainangua::SingleResourceKey<LookupType, ResourceType>& s) {
-            hash<decltype(s.key)> hasher;
-            return hasher(s.key);
-        }
-    };
-
-}

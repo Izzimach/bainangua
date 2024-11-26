@@ -48,7 +48,7 @@ template<class... Ts>
 struct overloaded : Ts... { using Ts::operator()...; };
 
 export
-constexpr std::size_t hash_value(SingleResourceKey<std::variant<MainDrawPool, TransferPool>, vk::CommandPool> const& r)
+constexpr std::size_t hash_value(const StdCommandPoolKey& r)
 {
 	return std::visit(overloaded{
 		[](MainDrawPool m) { size_t seed = 0; boost::hash_combine(seed, 1); boost::hash_combine(seed, m.queueIndex); return seed; },
@@ -113,8 +113,19 @@ constexpr bool operator==(const CommandBufferKey<PoolKey>& a, const CommandBuffe
 		&& a.index == b.index;
 }
 
+
 export
 using StdCommandBufferKey = CommandBufferKey<StdCommandPoolKey>;
+
+export
+std::size_t hash_value(const StdCommandBufferKey& r)
+{
+	size_t seed = 0;
+	boost::hash_combine(seed, r.index);
+	boost::hash_combine(seed, r.resettable);
+	boost::hash_combine(seed, hash_value(r.sourcePool));
+	return seed;
+}
 
 export
  auto commandBufferLoader = boost::hana::make_pair(
@@ -123,7 +134,7 @@ export
 		// first we need to get/allocate the pool
 		bng_expected<vk::CommandPool> pool = co_await loader.loadResource(bufferkey.sourcePool);
 		if (!pool) {
-			co_return bainangua::bng_unexpected<vk::CommandBuffer>(std::string("could not get commandPool failed in commandBufferLoader"));
+			co_return bainangua::bng_unexpected<vk::CommandBuffer>(std::string("get commandPool failed in commandBufferLoader"));
 
 		}
 
@@ -151,10 +162,8 @@ export
 }
 
 //
-// we need hash functions for boost::hana::map and std::unordered_map
+// we need a hash function for boost::hana::map
 //
-
-
 
 export
 template <>
@@ -165,46 +174,3 @@ struct boost::hana::hash_impl<bainangua::CommandBufferTag> {
 	}
 };
 
-
-namespace std {
-	export template<>
-	struct hash<bainangua::MainDrawPool> {
-		size_t operator()(bainangua::MainDrawPool const k) {
-			std::hash<size_t> hasher;
-			return hasher(k.queueIndex);
-		}
-	};
-	export template<>
-	struct hash<bainangua::TransferPool> {
-		size_t operator()(bainangua::TransferPool const) {
-			std::hash<size_t> hasher;
-			return hasher(13);
-		}
-	};
-	export
-		template <typename PoolType>
-	struct hash<bainangua::CommandBufferKey<PoolType>> {
-		constexpr size_t operator()(bainangua::CommandBufferKey<PoolType> s) {
-			size_t seed = 0;
-			boost::hash_combine(seed, s.sourcePool);
-			boost::hash_combine(seed, s.resettable);
-			boost::hash_combine(seed, s.index);
-			return seed;
-		}
-		constexpr size_t operator()(const bainangua::CommandBufferKey<PoolType>& s) const {
-			size_t seed = 0;
-			boost::hash_combine(seed, s.sourcePool);
-			boost::hash_combine(seed, s.resettable);
-			boost::hash_combine(seed, s.index);
-			return seed;
-		}
-		constexpr size_t operator()(const bainangua::CommandBufferKey<PoolType>& s) {
-			size_t seed = 0;
-			boost::hash_combine(seed, s.sourcePool);
-			boost::hash_combine(seed, s.resettable);
-			boost::hash_combine(seed, s.index);
-			return seed;
-		}
-	};
-
-}
