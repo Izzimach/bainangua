@@ -47,7 +47,7 @@ target_sources(bainangua
     TYPE CXX_MODULES 
     FILES "OneFrame.cppm" "VulkanContext.cppm" "PresentationLayer.cppm" "Pipeline.cppm" "Commands.cppm"
           "VertexBuffer.cppm" "UniformBuffer.cppm" "DescriptorSets.cppm" "TextureImage.cppm"
-          "resources/ResourceLoader.cppm" "resources/Shader.cppm" "resources/CommandBuffer.cppm")
+          "resources/ResourceLoader.cppm" "resources/Shader.cppm" "resources/CommandBuffer.cppm" "resources/StagingBuffer.cppm")
 
 
 target_include_directories(bainangua PUBLIC

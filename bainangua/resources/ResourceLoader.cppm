@@ -37,9 +37,23 @@ struct SingleResourceKey {
 };
 
 export
+template <typename ResourceType>
+struct SingleResourceKey<void,ResourceType> {
+    using hana_tag = bainangua::SingleResourceTag;
+
+    using resource_type = ResourceType;
+};
+
+export
 template <typename LookupType, typename ResourceType>
 constexpr bool operator==(const SingleResourceKey<LookupType, ResourceType>& a, const SingleResourceKey<LookupType, ResourceType>& b) {
     return a.key == b.key;
+}
+
+export
+template <typename ResourceType>
+constexpr bool operator==(const SingleResourceKey<void, ResourceType>&, const SingleResourceKey<void, ResourceType>&) {
+    return true;
 }
 
 export
@@ -48,6 +62,14 @@ std::size_t hash_value(SingleResourceKey<LookupType, ResourceType> const& r)
 {
     boost::hash<LookupType> hasher;
     return hasher(r.key);
+}
+
+export
+template <typename ResourceType>
+std::size_t hash_value(SingleResourceKey<void, ResourceType> const&)
+{
+    boost::hash<int> hasher;
+    return hasher(0);
 }
 
 export

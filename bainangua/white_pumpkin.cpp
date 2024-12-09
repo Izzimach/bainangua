@@ -34,6 +34,8 @@ import DescriptorSets;
 import TextureImage;
 import ResourceLoader;
 import Shader;
+import CommandBuffer;
+import StagingBuffer;
 
 void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, vk::Extent2D swapChainExtent, const bainangua::PipelineBundle &pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer, vk::DescriptorSet uboDescriptorSet) {
 	vk::CommandBufferBeginInfo beginInfo({}, {});
@@ -223,48 +225,15 @@ int main()
 		},
 		[=](bainangua::VulkanContext& s) -> bainangua::bng_expected<bool> {
 			auto loaderDirectory = boost::hana::make_map(
-				boost::hana::make_pair(boost::hana::type_c<TestResourceStore<std::string, int>>, []<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>&loader, TestResourceStore<std::string, int> key) -> bainangua::LoaderRoutine<int> {
-					std::cout << "int loader running\n";
-
-					auto k1 = TestResourceStore<int, float>{ 1 };
-					auto k2 = TestResourceStore<int, float>{ 1 };
-
-					const auto results = co_await coro::when_all(loader.loadResource(k1), loader.loadResource(k2));
-					auto result1 = std::get<0>(results).return_value();
-					auto result2 = std::get<1>(results).return_value();
-
-					if (result1.has_value() && result2.has_value()) {
-						co_return bainangua::bng_expected<bainangua::LoaderResults<int>>(
-							{
-								.resource_ = static_cast<int>(result1.value() + result2.value()),
-								.unloader_ = []() -> coro::task<bainangua::bng_expected<void>> {
-									std::cout << "unloading int resource\n";
-									co_return{};
-								}()
-							}
-						);
-					}
-					else {
-						co_return bainangua::bng_unexpected<bainangua::LoaderResults<int>>("error loading dependencies");
-					}
-				}),
-				boost::hana::make_pair(boost::hana::type_c<TestResourceStore<int, float>>, []<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>&loader, TestResourceStore<int, float> key) -> bainangua::LoaderRoutine<float> {
-					std::cout << "float loader running\n";
-					co_return bainangua::bng_expected<bainangua::LoaderResults<float>>(
-						{
-							.resource_ = 3.0f + static_cast<float>(key.key),
-							.unloader_ = []() -> coro::task<bainangua::bng_expected<void>> {
-								std::cout << "unloading float resource\n";
-								co_return{};
-							}()
-						}
-					);
-				}),
-				bainangua::shaderLoader
+				bainangua::shaderLoader,
+				bainangua::commandPoolLoader,
+				bainangua::commandBufferLoader,
+				bainangua::stagingBufferPoolLoader<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>
 			);
 
 			auto f = bainangua::ResourceLoaderStage(loaderDirectory)
 				| bainangua::CreateShaderAsResource<BOOST_HANA_STRING("vertexShader")>(std::filesystem::path(SHADER_DIR) / "Basic.vert_spv")
+				| bainangua::CreateStagingBufferAsResource<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(900)
 				| NoRenderLoop();
 
 			auto r = boost::hana::make_map(
