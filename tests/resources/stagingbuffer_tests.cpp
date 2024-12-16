@@ -41,7 +41,7 @@ TEST_CASE("ResourceLoaderStagingBuffer", "[ResourceLoader][StagingBuffer][Stagin
 	SECTION("acquiring a vertex buffer also loads a staging buffer pool that stays loaded") {
 		auto testResult =
 			testWrapper("ResourceLoaderStagingBuffer", testLoaderLookup, [=](std::shared_ptr<TestResourceLoader> loader) {
-				bainangua::bng_expected<bainangua::StagingBufferInfo> buffer = coro::sync_wait(bainangua::acquireStagingBuffer<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(loader, requestSize));
+				auto buffer = coro::sync_wait(bainangua::acquireStagingBuffer<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(loader, requestSize));
 				if (!buffer) {
 					return std::string("acquire staging buffer failed");
 				}
@@ -49,7 +49,7 @@ TEST_CASE("ResourceLoaderStagingBuffer", "[ResourceLoader][StagingBuffer][Stagin
 				// there should be one pool loaded
 				size_t loadedCount = loader->measureLoad();
 
-				// release the buffer - note that the pool is still loaded
+				// release the buffer - note the pool should unload as well
 				coro::sync_wait(releaseStagingBuffer<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(loader, buffer.value()));
 
 				// is there anything still loaded? should be 0
@@ -59,14 +59,14 @@ TEST_CASE("ResourceLoaderStagingBuffer", "[ResourceLoader][StagingBuffer][Stagin
 			}
 			);
 		REQUIRE(testResult.has_value());
-		REQUIRE(testResult.value() == "staging buffer load success, loaded=1 unloaded=1");
+		REQUIRE(testResult.value() == "staging buffer load success, loaded=1 unloaded=0");
 	}
 
 	SECTION("two vertex buffers with the same buffer type share a command pool") {
 		auto sharedPoolResult =
 			testWrapper("ResourceLoaderStagingBuffer", testLoaderLookup, [=](std::shared_ptr<TestResourceLoader> loader) {
-			bainangua::bng_expected<bainangua::StagingBufferInfo> buffer1 = coro::sync_wait(bainangua::acquireStagingBuffer<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(loader, requestSize));
-			bainangua::bng_expected<bainangua::StagingBufferInfo> buffer2 = coro::sync_wait(bainangua::acquireStagingBuffer<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(loader, requestSize));
+			auto buffer1 = coro::sync_wait(bainangua::acquireStagingBuffer<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(loader, requestSize));
+			auto buffer2 = coro::sync_wait(bainangua::acquireStagingBuffer<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(loader, requestSize));
 			if (!buffer1 || !buffer2) {
 					return std::string("acquire staging buffer failed");
 				}
@@ -74,7 +74,7 @@ TEST_CASE("ResourceLoaderStagingBuffer", "[ResourceLoader][StagingBuffer][Stagin
 				// there should be one pool loaded
 				size_t loadedCount = loader->measureLoad();
 
-				// release the buffers - note that the pool is still loaded
+				// release the buffers, and the pool shuld also unload
 				coro::sync_wait(releaseStagingBuffer<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(loader, buffer1.value()));
 				coro::sync_wait(releaseStagingBuffer<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(loader, buffer2.value()));
 
@@ -85,6 +85,6 @@ TEST_CASE("ResourceLoaderStagingBuffer", "[ResourceLoader][StagingBuffer][Stagin
 			}
 			);
 		REQUIRE(sharedPoolResult.has_value());
-		REQUIRE(sharedPoolResult.value() == "shared staging buffer load success, loaded=1 unloaded=1");
+		REQUIRE(sharedPoolResult.value() == "shared staging buffer load success, loaded=1 unloaded=0");
 	}
 }
