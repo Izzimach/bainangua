@@ -38,7 +38,7 @@ TEST_CASE("ResourceLoaderStagingBuffer", "[ResourceLoader][StagingBuffer][Stagin
 
 	const size_t requestSize = 900;
 
-	SECTION("acquiring a vertex buffer also loads a staging buffer pool that stays loaded") {
+	SECTION("acquiring a vertex buffer also loads a staging buffer pool") {
 		auto testResult =
 			testWrapper("ResourceLoaderStagingBuffer", testLoaderLookup, [=](std::shared_ptr<TestResourceLoader> loader) {
 				auto buffer = coro::sync_wait(bainangua::acquireStagingBuffer<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(loader, requestSize));
@@ -71,7 +71,7 @@ TEST_CASE("ResourceLoaderStagingBuffer", "[ResourceLoader][StagingBuffer][Stagin
 					return std::string("acquire staging buffer failed");
 				}
 
-				// there should be one pool loaded
+				// there should only be one pool loaded
 				size_t loadedCount = loader->measureLoad();
 
 				// release the buffers, and the pool shuld also unload
@@ -87,4 +87,105 @@ TEST_CASE("ResourceLoaderStagingBuffer", "[ResourceLoader][StagingBuffer][Stagin
 		REQUIRE(sharedPoolResult.has_value());
 		REQUIRE(sharedPoolResult.value() == "shared staging buffer load success, loaded=1 unloaded=0");
 	}
+
+	SECTION("acquiring an index buffer also loads a staging buffer pool") {
+		auto testResult =
+			testWrapper("ResourceLoaderStagingBuffer", testLoaderLookup, [=](std::shared_ptr<TestResourceLoader> loader) {
+			auto buffer = coro::sync_wait(bainangua::acquireStagingBuffer<VK_BUFFER_USAGE_INDEX_BUFFER_BIT>(loader, requestSize));
+			if (!buffer) {
+				return std::string("acquire staging buffer failed");
+			}
+
+			// there should be one pool loaded
+			size_t loadedCount = loader->measureLoad();
+
+			// release the buffer - note the pool should unload as well
+			coro::sync_wait(releaseStagingBuffer<VK_BUFFER_USAGE_INDEX_BUFFER_BIT>(loader, buffer.value()));
+
+			// is there anything still loaded? should be 0
+			size_t unloadedCount = loader->measureLoad();
+
+			return std::format("staging buffer load success, loaded={} unloaded={}", loadedCount, unloadedCount);
+				}
+			);
+		REQUIRE(testResult.has_value());
+		REQUIRE(testResult.value() == "staging buffer load success, loaded=1 unloaded=0");
+	}
+
+	SECTION("two index buffers with the same buffer type share a command pool") {
+		auto sharedPoolResult =
+			testWrapper("ResourceLoaderStagingBuffer", testLoaderLookup, [=](std::shared_ptr<TestResourceLoader> loader) {
+			auto buffer1 = coro::sync_wait(bainangua::acquireStagingBuffer<VK_BUFFER_USAGE_INDEX_BUFFER_BIT>(loader, requestSize));
+			auto buffer2 = coro::sync_wait(bainangua::acquireStagingBuffer<VK_BUFFER_USAGE_INDEX_BUFFER_BIT>(loader, requestSize));
+			if (!buffer1 || !buffer2) {
+				return std::string("acquire staging buffer failed");
+			}
+
+			// there should only be one pool loaded
+			size_t loadedCount = loader->measureLoad();
+
+			// release the buffers, and the pool shuld also unload
+			coro::sync_wait(releaseStagingBuffer<VK_BUFFER_USAGE_INDEX_BUFFER_BIT>(loader, buffer1.value()));
+			coro::sync_wait(releaseStagingBuffer<VK_BUFFER_USAGE_INDEX_BUFFER_BIT>(loader, buffer2.value()));
+
+			// is there anything still loaded? should be 0
+			size_t unloadedCount = loader->measureLoad();
+
+			return std::format("shared staging buffer load success, loaded={} unloaded={}", loadedCount, unloadedCount);
+				}
+			);
+		REQUIRE(sharedPoolResult.has_value());
+		REQUIRE(sharedPoolResult.value() == "shared staging buffer load success, loaded=1 unloaded=0");
+	}
+
+	SECTION("acquiring a uniform buffer also loads a staging buffer pool") {
+		auto testResult =
+			testWrapper("ResourceLoaderStagingBuffer", testLoaderLookup, [=](std::shared_ptr<TestResourceLoader> loader) {
+			auto buffer = coro::sync_wait(bainangua::acquireStagingBuffer<VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT>(loader, requestSize));
+			if (!buffer) {
+				return std::string("acquire staging buffer failed");
+			}
+
+			// there should be one pool loaded
+			size_t loadedCount = loader->measureLoad();
+
+			// release the buffer - note the pool should unload as well
+			coro::sync_wait(releaseStagingBuffer<VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT>(loader, buffer.value()));
+
+			// is there anything still loaded? should be 0
+			size_t unloadedCount = loader->measureLoad();
+
+			return std::format("staging buffer load success, loaded={} unloaded={}", loadedCount, unloadedCount);
+				}
+			);
+		REQUIRE(testResult.has_value());
+		REQUIRE(testResult.value() == "staging buffer load success, loaded=1 unloaded=0");
+	}
+
+	SECTION("two uniform buffers with the same buffer type share a command pool") {
+		auto sharedPoolResult =
+			testWrapper("ResourceLoaderStagingBuffer", testLoaderLookup, [=](std::shared_ptr<TestResourceLoader> loader) {
+			auto buffer1 = coro::sync_wait(bainangua::acquireStagingBuffer<VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT>(loader, requestSize));
+			auto buffer2 = coro::sync_wait(bainangua::acquireStagingBuffer<VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT>(loader, requestSize));
+			if (!buffer1 || !buffer2) {
+				return std::string("acquire staging buffer failed");
+			}
+
+			// there should only be one pool loaded
+			size_t loadedCount = loader->measureLoad();
+
+			// release the buffers, and the pool shuld also unload
+			coro::sync_wait(releaseStagingBuffer<VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT>(loader, buffer1.value()));
+			coro::sync_wait(releaseStagingBuffer<VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT>(loader, buffer2.value()));
+
+			// is there anything still loaded? should be 0
+			size_t unloadedCount = loader->measureLoad();
+
+			return std::format("shared staging buffer load success, loaded={} unloaded={}", loadedCount, unloadedCount);
+				}
+			);
+		REQUIRE(sharedPoolResult.has_value());
+		REQUIRE(sharedPoolResult.value() == "shared staging buffer load success, loaded=1 unloaded=0");
+	}
+
 }
