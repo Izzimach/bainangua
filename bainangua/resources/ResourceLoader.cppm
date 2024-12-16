@@ -224,7 +224,7 @@ public:
             }
             
             else {
-                storePtr->resourceValue_ = bng_unexpected<LookupKey::resource_type>(result.error());
+                storePtr->resourceValue_ = bng_unexpected(result.error());
             }
 
             // signal the event to wake up waiters. We do this even if the loader failed, so that waiters

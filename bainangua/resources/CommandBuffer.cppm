@@ -73,7 +73,7 @@ export auto commandPoolLoader = boost::hana::make_pair(
 		vk::CommandPool pool;
 		vk::Result result = loader.context_.vkDevice.createCommandPool(&commandPoolInfo, nullptr, &pool);
 		if (result != vk::Result::eSuccess) {
-			co_return bainangua::bng_unexpected<vk::CommandPool>(std::string("createCommandPool failed in commandPoolLoader"));
+			co_return bainangua::bng_unexpected(std::string("createCommandPool failed in commandPoolLoader"));
 		}
 
 		co_return bainangua::bng_expected<bainangua::LoaderResults<vk::CommandPool>>(
@@ -134,7 +134,7 @@ export
 		// first we need to get/allocate the pool
 		bng_expected<vk::CommandPool> pool = co_await loader.loadResource(bufferkey.sourcePool);
 		if (!pool) {
-			co_return bainangua::bng_unexpected<vk::CommandBuffer>(std::string("get commandPool failed in commandBufferLoader"));
+			co_return bainangua::bng_unexpected(std::string("get commandPool failed in commandBufferLoader"));
 
 		}
 
@@ -143,7 +143,7 @@ export
 		vk::Result result = loader.context_.vkDevice.allocateCommandBuffers(&bufferInfo, &cmd);
 		if (result != vk::Result::eSuccess) {
 			co_await loader.unloadResource(bufferkey.sourcePool);
-			co_return bainangua::bng_unexpected<vk::CommandBuffer>(std::string("allocateCommandBuffers failed in commandBufferLoader"));
+			co_return bainangua::bng_unexpected(std::string("allocateCommandBuffers failed in commandBufferLoader"));
 		}
 
 		co_return bainangua::bng_expected<bainangua::LoaderResults<vk::CommandBuffer>>(

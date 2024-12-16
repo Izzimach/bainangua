@@ -63,7 +63,7 @@ auto createStagingBuffer(VmaAllocator allocator, VkBufferUsageFlags usageFlags, 
 	VmaAllocation allocation;
 	auto vkResult = vmaCreateBuffer(allocator, &bufferCreateInfo, &vmaAllocateInfo, &buffer, &allocation, nullptr);
 	if (vkResult != VK_SUCCESS) {
-		return bng_unexpected<StagingBuffer<BufferType>>("vmaCreateBuffer failed");
+		return bng_unexpected("vmaCreateBuffer failed");
 	}
 
 	// get the mapped memory location
@@ -106,13 +106,13 @@ public:
 		// first wait on the semaphore - once we pass this we know at least one buffer is available
 		auto bufferAvailable = co_await store_count_semaphore_.acquire();
 		if (bufferAvailable != coro::semaphore::acquire_result::acquired) {
-			co_return bainangua::bng_unexpected<StagingBuffer<BufferType>>("failed to acquire staging buffer semaphore");
+			co_return bainangua::bng_unexpected("failed to acquire staging buffer semaphore");
 		}
 		
 		auto storeLock = co_await store_mutex_.lock();
 		// if we passed the semaphore above, there should be at least one staging buffer avialable
 		if (available_buffers_.size() == 0) {
-			co_return bng_unexpected<StagingBuffer<BufferType>>("no available staging buffers found");
+			co_return bng_unexpected("no available staging buffers found");
 		}
 		// look for a buffer large enough for the request
 		auto suitableBuffer = std::ranges::find_if(available_buffers_, [=](StagingBuffer<BufferType>& s) {return s.sizeInBytes >= requestedSize; });
@@ -176,7 +176,7 @@ constexpr auto acquireStagingBuffer =
 	// first need to acquire/load a staging buffer pool
 	bng_expected<std::shared_ptr<StagingBufferPool<BufferType>>> poolResult = co_await loader->loadResource(StagingBufferPoolKey<BufferType>());
 	if (!poolResult) {
-		co_return bainangua::bng_unexpected<StagingBuffer<BufferType>>(poolResult.error());
+		co_return bainangua::bng_unexpected(poolResult.error());
 	}
 
 	auto buffer = co_await poolResult.value()->acquireStagingBufferTask(requestSize);
@@ -184,7 +184,7 @@ constexpr auto acquireStagingBuffer =
 		co_return bainangua::bng_expected<StagingBuffer<BufferType>>(buffer.value());
 	}
 	else {
-		co_return bainangua::bng_unexpected<StagingBuffer<BufferType>>(buffer.error());
+		co_return bainangua::bng_unexpected(buffer.error());
 	}
 };
 
