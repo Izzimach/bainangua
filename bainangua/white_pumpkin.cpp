@@ -28,7 +28,7 @@ import VulkanContext;
 import OneFrame;
 import Pipeline;
 import PresentationLayer;
-import VertexBuffer;
+import VertBuffer;
 import UniformBuffer;
 import DescriptorSets;
 import TextureImage;
@@ -233,7 +233,7 @@ int main()
 
 			auto f = bainangua::ResourceLoaderStage(loaderDirectory)
 				| bainangua::CreateShaderAsResource<BOOST_HANA_STRING("vertexShader")>(std::filesystem::path(SHADER_DIR) / "Basic.vert_spv")
-				| bainangua::CreateStagingBufferAsResource<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(900)
+				| bainangua::CreateStagingBuffer<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(900)
 				| NoRenderLoop();
 
 			auto r = boost::hana::make_map(

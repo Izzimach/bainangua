@@ -15,7 +15,7 @@ import Pipeline;
 import PresentationLayer;
 import TextureImage;
 import UniformBuffer;
-import VertexBuffer;
+import VertBuffer;
 import VulkanContext;
 
 namespace bainangua_BaseTests {

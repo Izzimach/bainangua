@@ -17,7 +17,7 @@ module;
 export module Pipeline;
 
 import PresentationLayer;
-import VertexBuffer;
+import VertBuffer;
 import UniformBuffer;
 import DescriptorSets;
 

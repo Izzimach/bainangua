@@ -8,7 +8,7 @@ module;
 #include <glm/glm.hpp>
 #include <reflect>
 
-export module VertexBuffer;
+export module VertBuffer;
 
 import VulkanContext;
 import Commands;

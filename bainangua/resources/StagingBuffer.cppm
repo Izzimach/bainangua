@@ -219,9 +219,9 @@ struct CreateStagingBuffer {
 		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 		auto       loader = boost::hana::at_key(r, BOOST_HANA_STRING("resourceLoader"));
 
-		bng_expected<StagingBuffer> buffer = coro::sync_wait(acquireStagingBuffer<BufferType>(loader, requestSize));
+		bng_expected<StagingBuffer<BufferType>> buffer = coro::sync_wait(acquireStagingBuffer<BufferType>(loader, requestSize));
 		if (!buffer.has_value()) {
-			return bng_unexpected<bool>(buffer.error());
+			return bng_unexpected(buffer.error());
 		}
 
 		auto rWithBuffer = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("stagingBuffer"), buffer.value()));

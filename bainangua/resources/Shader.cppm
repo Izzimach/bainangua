@@ -96,7 +96,7 @@ struct CreateShaderAsResource {
 
 		bng_expected<vk::ShaderModule> shaderModule = coro::sync_wait(loader->loadResource(key));
 		if (!shaderModule.has_value()) {
-			return bng_unexpected<bool>(shaderModule.error());
+			return bng_unexpected(shaderModule.error());
 		}
 
 		auto rWithShader = boost::hana::insert(r, boost::hana::make_pair(ShaderName, shaderModule.value()));

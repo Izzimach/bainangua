@@ -46,8 +46,8 @@ target_sources(bainangua
     FILE_SET bainangua_modules 
     TYPE CXX_MODULES 
     FILES "OneFrame.cppm" "VulkanContext.cppm" "PresentationLayer.cppm" "Pipeline.cppm" "Commands.cppm"
-          "VertexBuffer.cppm" "UniformBuffer.cppm" "DescriptorSets.cppm" "TextureImage.cppm"
-          "resources/ResourceLoader.cppm" "resources/Shader.cppm" "resources/CommandBuffer.cppm" "resources/StagingBuffer.cppm")
+          "VertBuffer.cppm" "UniformBuffer.cppm" "DescriptorSets.cppm" "TextureImage.cppm"
+          "resources/ResourceLoader.cppm" "resources/Shader.cppm" "resources/CommandBuffer.cppm" "resources/StagingBuffer.cppm" "resources/VertexBuffer.cppm")
 
 
 target_include_directories(bainangua PUBLIC
