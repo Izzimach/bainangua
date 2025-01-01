@@ -25,7 +25,7 @@ module;
 
 export module StagingBuffer;
 
-import ResourceLoader;
+import VulkanContext;
 
 namespace bainangua {
 
@@ -144,64 +144,6 @@ private:
 	std::vector<StagingBuffer<BufferType>> available_buffers_;
 };
 
-
-export
-template <VkBufferUsageFlags BufferType>
-using StagingBufferPoolKey = bainangua::SingleResourceKey<void, std::shared_ptr<StagingBufferPool<BufferType>>>;
-
-export
-template <VkBufferUsageFlags BufferType>
-auto stagingBufferPoolLoader = boost::hana::make_pair(
-	boost::hana::type_c<StagingBufferPoolKey<BufferType>>,
-	[]<typename Resources, typename Storage>(bainangua::ResourceLoader<Resources, Storage>&loader, StagingBufferPoolKey<BufferType> poolkey) -> bainangua::LoaderRoutine<std::shared_ptr<StagingBufferPool<BufferType>>> {
-		
-		std::shared_ptr<StagingBufferPool<BufferType>> newPool(std::make_shared<StagingBufferPool<BufferType>>(loader.context_.vmaAllocator));
-
-		co_return bainangua::bng_expected<bainangua::LoaderResults<std::shared_ptr<StagingBufferPool<BufferType>>>>(
-			{
-				.resource_ = newPool,
-				.unloader_ = [](std::shared_ptr<StagingBufferPool<BufferType>> pool) -> coro::task<bainangua::bng_expected<void>> {
-					// should be auto-deleted once the shared_ptr<> refs vanish
-					co_return{};
-				}(newPool)
-			}
-		);
-	}
-);
-
-export
-template <VkBufferUsageFlags BufferType>
-constexpr auto acquireStagingBuffer =
-	[]<typename Resources, typename Storage>(std::shared_ptr<bainangua::ResourceLoader<Resources, Storage>> loader, size_t requestSize) -> coro::task<bng_expected<StagingBuffer<BufferType>>> {
-	// first need to acquire/load a staging buffer pool
-	bng_expected<std::shared_ptr<StagingBufferPool<BufferType>>> poolResult = co_await loader->loadResource(StagingBufferPoolKey<BufferType>());
-	if (!poolResult) {
-		co_return bainangua::bng_unexpected(poolResult.error());
-	}
-
-	auto buffer = co_await poolResult.value()->acquireStagingBufferTask(requestSize);
-	if (buffer) {
-		co_return bainangua::bng_expected<StagingBuffer<BufferType>>(buffer.value());
-	}
-	else {
-		co_return bainangua::bng_unexpected(buffer.error());
-	}
-};
-
-
-export
-template <VkBufferUsageFlags BufferType, typename Resources, typename Storage>
-auto releaseStagingBuffer(std::shared_ptr<bainangua::ResourceLoader<Resources, Storage>> loader, StagingBuffer<BufferType> buffer) -> coro::task<bng_expected<void>> {
-
-	co_await buffer.sourcePool->releaseStagingBufferTask(buffer);
-
-	co_await loader->unloadResource(StagingBufferPoolKey<BufferType>());
-
-	co_return {};
-}
-
-export struct Argh {};
-
 export
 template <VkBufferUsageFlags BufferType>
 struct CreateStagingBuffer {
@@ -216,10 +158,11 @@ struct CreateStagingBuffer {
 
 	template <typename RowFunction, typename Row>
 	constexpr bng_expected<bool> wrapRowFunction(RowFunction f, Row r) {
+		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
-		auto       loader = boost::hana::at_key(r, BOOST_HANA_STRING("resourceLoader"));
 
-		bng_expected<StagingBuffer<BufferType>> buffer = coro::sync_wait(acquireStagingBuffer<BufferType>(loader, requestSize));
+		StagingBufferPool pool(context.vmaAllocator);
+		bng_expected<StagingBuffer<BufferType>> buffer = coro::sync_wait(pool.acquireStagingBufferTask(requestSize));
 		if (!buffer.has_value()) {
 			return bng_unexpected(buffer.error());
 		}
@@ -227,7 +170,7 @@ struct CreateStagingBuffer {
 		auto rWithBuffer = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("stagingBuffer"), buffer.value()));
 		auto applyResult = f.applyRow(rWithBuffer);
 
-		coro::sync_wait(releaseStagingBuffer<BufferType>(loader, buffer.value()));
+		coro::sync_wait(pool.releaseStagingBufferTask<BufferType>(buffer.value()));
 		return true;
 	}
 };

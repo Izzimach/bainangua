@@ -9,7 +9,7 @@ find_package(Boost REQUIRED)
 find_package(Catch2 3 REQUIRED)
 
 
-add_executable(nangua_test "nangua_tests.cpp" "RowTypeTests.cpp" "resources/resourceloader_tests.cpp" "resources/shader_tests.cpp" "resources/commandbuffer_tests.cpp" "resources/stagingbuffer_tests.cpp")
+add_executable(nangua_test "nangua_tests.cpp" "RowTypeTests.cpp" "resources/resourceloader_tests.cpp" "resources/shader_tests.cpp" "resources/commandbuffer_tests.cpp" "resources/stagingbuffer_tests.cpp" "resources/commandqueue_tests.cpp")
 target_compile_features(nangua_test PUBLIC cxx_std_20)
 
 set(ASSETS_DIR ${ASSETS_BINARY_DIR})

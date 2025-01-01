@@ -562,4 +562,31 @@ auto createVulkanContext(const VulkanContextConfig& config, std::function<typena
     return vulkanStages.applyRow(configRow);
 }
 
+export
+struct QuickCreateContext {
+    QuickCreateContext(VulkanContextConfig config) : config_(config) {}
+
+    VulkanContextConfig config_;
+
+    using row_tag = RowType::RowWrapperTag;
+
+    template <typename WrappedReturnType>
+    using return_type_transformer = WrappedReturnType;
+
+    template <typename RowFunction, typename Row>
+    constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+        auto vulkanStages =
+            GLFWOuterWrapper()
+            | StandardVulkanInstance()
+            | FirstSwapchainPhysicalDevice()
+            | CreateGLFWWindowAndSurface()
+            | StandardDevice()
+            | StandardVMAAllocator()
+            | f;
+
+        auto rWithConfig = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("config"), config_));
+        return vulkanStages.applyRow(rWithConfig);
+    }
+};
+
 }

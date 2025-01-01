@@ -7,6 +7,7 @@
 #include "tanuki.hpp"
 #include "white_pumpkin.hpp"
 
+
 #include <algorithm>
 #include <concepts>
 #include <filesystem>
@@ -17,7 +18,14 @@
 #include <boost/hana/define_struct.hpp>
 #include <coro/coro.hpp>
 #include <map>
+#include <utility>
 #include <vector>
+
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <reflect.hpp>
+
 
 #ifdef NDEBUG
 #include <windows.h>
@@ -34,8 +42,9 @@ import DescriptorSets;
 import TextureImage;
 import ResourceLoader;
 import Shader;
-import CommandBuffer;
 import StagingBuffer;
+import VertexBuffer;
+import CommandQueue;
 
 void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, vk::Extent2D swapChainExtent, const bainangua::PipelineBundle &pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer, vk::DescriptorSet uboDescriptorSet) {
 	vk::CommandBufferBeginInfo beginInfo({}, {});
@@ -196,12 +205,45 @@ struct InvokeRenderLoop {
 	constexpr bainangua::bng_expected<bool> applyRow(Row r) { return renderLoop(r); }
 };
 
+struct InnerFunction {
+	using row_tag = RowType::RowFunctionTag;
+	using return_type = bainangua::bng_expected<bool>;
 
+	template <typename Row>
+	constexpr bainangua::bng_expected<bool> applyRow(Row r) {
+		bainangua::VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		std::pmr::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("commandBuffers"));
+		std::shared_ptr<bainangua::CommandQueueFunnel> graphicsQueue = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsFunnel"));
 
+		vk::CommandBuffer cmd = commandBuffers[0];
 
+		vk::CommandBufferBeginInfo beginInfo({}, {});
+		cmd.begin(beginInfo);
+		cmd.end();
 
-template <typename Key, typename Resource>
-using TestResourceStore = bainangua::SingleResourceKey<Key, Resource>;
+		vk::SubmitInfo submit(0, nullptr, {}, 1, &cmd, 0, nullptr, nullptr);
+
+		coro::event e;
+
+		auto completionTask = [](coro::event& e) -> coro::task<void> {
+			e.set();
+			co_return;
+		};
+
+		auto awaiterTask = [](const coro::event& e) -> coro::task<void> {
+			co_await e;
+			co_return;
+		};
+
+		graphicsQueue->awaitCommand(submit, completionTask(e));
+
+		coro::sync_wait(awaiterTask(e));
+
+		s.vkDevice.waitIdle();
+
+		return true;
+	}
+};
 
 #ifdef NDEBUG
 int WINAPI wWinMain(HINSTANCE , HINSTANCE , PWSTR , int )
@@ -225,20 +267,18 @@ int main()
 		},
 		[=](bainangua::VulkanContext& s) -> bainangua::bng_expected<bool> {
 			auto loaderDirectory = boost::hana::make_map(
-				bainangua::shaderLoader,
-				bainangua::commandPoolLoader,
-				bainangua::commandBufferLoader,
-				bainangua::stagingBufferPoolLoader<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>
+				bainangua::shaderLoader
 			);
 
-			auto f = bainangua::ResourceLoaderStage(loaderDirectory)
-				| bainangua::CreateShaderAsResource<BOOST_HANA_STRING("vertexShader")>(std::filesystem::path(SHADER_DIR) / "Basic.vert_spv")
-				| bainangua::CreateStagingBuffer<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>(900)
-				| NoRenderLoop();
+			auto f = 
+				bainangua::ResourceLoaderStage(loaderDirectory)
+				| bainangua::CreateQueueFunnels()
+				| bainangua::SimpleGraphicsCommandPoolStage()
+				| bainangua::PrimaryGraphicsCommandBuffersStage(1)
+				| InnerFunction();
 
 			auto r = boost::hana::make_map(
-				boost::hana::make_pair(BOOST_HANA_STRING("context"), s),
-				boost::hana::make_pair(BOOST_HANA_STRING("device"), s.vkDevice)
+				boost::hana::make_pair(BOOST_HANA_STRING("context"), s)
 			);
 			return f.applyRow(r).transform([](auto) { return true; });
 		}

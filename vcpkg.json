@@ -1,6 +1,7 @@
 {
   "dependencies": [
     "benchmark",
+    "boost-container-hash",
     "boost-hana",
     "catch2",
     "glfw3",
@@ -8,7 +9,6 @@
     "gtl",
     "immer",
     "vulkan",
-    "vulkan-memory-allocator",
-    "boost-container-hash"
+    "vulkan-memory-allocator"
   ]
 }

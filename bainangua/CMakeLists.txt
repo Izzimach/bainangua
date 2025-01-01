@@ -40,7 +40,7 @@ target_sources(bainangua
     TYPE CXX_MODULES 
     FILES "OneFrame.cppm" "VulkanContext.cppm" "PresentationLayer.cppm" "Pipeline.cppm" "Commands.cppm"
           "VertBuffer.cppm" "UniformBuffer.cppm" "DescriptorSets.cppm" "TextureImage.cppm"
-          "resources/ResourceLoader.cppm" "resources/Shader.cppm" "resources/CommandBuffer.cppm" "resources/StagingBuffer.cppm" "resources/VertexBuffer.cppm")
+          "resources/ResourceLoader.cppm" "resources/Shader.cppm" "resources/CommandQueue.cppm" "resources/StagingBuffer.cppm" "resources/VertexBuffer.cppm")
 
 
 target_include_directories(bainangua PUBLIC
@@ -147,6 +147,8 @@ configure_file(white_pumpkin.hpp.in white_pumpkin.hpp)
 target_include_directories(white_pumpkin PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}   # the generated white_pumpkin.hpp gets put in the BUILD directory, so this makes sure we can find it
+    ${qlibsreflect_SOURCE_DIR}
+    ${GTL_INCLUDE_DIRS}
     )
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
