@@ -29,7 +29,7 @@ struct BasicCommandQueueTest {
 	template <typename Row>
 	constexpr bainangua::bng_expected<bool> applyRow(Row r) {
 		bainangua::VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
-		std::pmr::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("commandBuffers"));
+		std::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("commandBuffers"));
 		std::shared_ptr<bainangua::CommandQueueFunnel> graphicsQueue = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsFunnel"));
 
 		vk::CommandBuffer cmd = commandBuffers[0];

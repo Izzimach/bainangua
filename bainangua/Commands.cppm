@@ -34,9 +34,9 @@ export void withCommandPool(const VulkanContext& s, const vk::CommandPoolCreateI
 	s.vkDevice.destroyCommandPool(pool);
 }
 
-export void withCommandBuffers(const VulkanContext& s, const vk::CommandBufferAllocateInfo& info, std::function<void(std::pmr::vector<vk::CommandBuffer> &)> wrapped)
+export void withCommandBuffers(const VulkanContext& s, const vk::CommandBufferAllocateInfo& info, std::function<void(std::vector<vk::CommandBuffer> &)> wrapped)
 {
-	std::pmr::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(info);
+	std::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers(info);
 	try {
 		wrapped(buffers);
 	}
@@ -49,7 +49,7 @@ export void withCommandBuffers(const VulkanContext& s, const vk::CommandBufferAl
 
 export void withCommandBuffer(const VulkanContext& s, vk::CommandPool pool, std::function<void(vk::CommandBuffer)> wrapped)
 {
-	std::pmr::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
+	std::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
 	try {
 		wrapped(buffers[0]);
 	}
@@ -61,7 +61,7 @@ export void withCommandBuffer(const VulkanContext& s, vk::CommandPool pool, std:
 }
 
 export auto submitCommand(const VulkanContext& s, vk::CommandPool pool, std::function<vk::Result(vk::CommandBuffer)> commands) -> vk::Result {
-	std::pmr::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
+	std::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
 
 	vk::CommandBuffer commandBuffer = commandBuffers[0];
 
@@ -126,7 +126,7 @@ export struct PrimaryGraphicsCommandBuffersStage {
 		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 		vk::CommandPool commandPool = boost::hana::at_key(r, BOOST_HANA_STRING("commandPool"));
 
-		std::pmr::vector<vk::CommandBuffer> commandBuffers = context.vkDevice.allocateCommandBuffers<std::pmr::polymorphic_allocator<vk::CommandBuffer>>(vk::CommandBufferAllocateInfo(commandPool, vk::CommandBufferLevel::ePrimary, count_));
+		std::vector<vk::CommandBuffer> commandBuffers = context.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(commandPool, vk::CommandBufferLevel::ePrimary, count_));
 
 		auto rWithBuffers = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("commandBuffers"), commandBuffers));
 		auto result = f.applyRow(rWithBuffers);
