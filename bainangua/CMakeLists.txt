@@ -18,6 +18,13 @@ find_path(GTL_INCLUDE_DIRS "gtl/adv_utils.hpp")
 include(FetchContent)
 
 FetchContent_Declare(
+  qlibsreflect
+  GIT_REPOSITORY https://github.com/qlibs/reflect
+  GIT_TAG v1.2.3
+)
+FetchContent_MakeAvailable(qlibsreflect)
+
+FetchContent_Declare(
     libcoro
     GIT_REPOSITORY https://github.com/jbaldwin/libcoro.git
     GIT_TAG        v0.12.1
@@ -48,6 +55,7 @@ target_include_directories(bainangua PUBLIC
 	${CMAKE_CURRENT_SOURCE_DIR}/include
     )
 target_include_directories(bainangua PRIVATE
+    ${qlibsreflect_SOURCE_DIR}
     ${GTL_INCLUDE_DIRS}
     )
 
