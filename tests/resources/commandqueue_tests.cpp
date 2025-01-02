@@ -23,6 +23,10 @@ import CommandQueue;
 
 
 struct BasicCommandQueueTest {
+	BasicCommandQueueTest(unsigned int c) : loop_count_(c) {}
+
+	unsigned int loop_count_;
+
 	using row_tag = RowType::RowFunctionTag;
 	using return_type = bainangua::bng_expected<bool>;
 
@@ -45,16 +49,20 @@ struct BasicCommandQueueTest {
 		auto completionTask = [](coro::event& e) -> coro::task<void> {
 			e.set();
 			co_return;
-			};
+		};
 
 		auto awaiterTask = [](const coro::event& e) -> coro::task<void> {
 			co_await e;
 			co_return;
-			};
+		};
 
-		graphicsQueue->awaitCommand(submit, completionTask(e));
+		for (unsigned ix = 0; ix < loop_count_; ix++) {
+			graphicsQueue->awaitCommand(submit, completionTask(e));
 
-		coro::sync_wait(awaiterTask(e));
+			coro::sync_wait(awaiterTask(e));
+
+			e.reset();
+		}
 
 		s.vkDevice.waitIdle();
 
@@ -63,17 +71,25 @@ struct BasicCommandQueueTest {
 };
 
 
-
-
 TEST_CASE("CommandQueue", "[CommandQueue]")
 {
-	bainangua::bng_expected<bool> queueTestResult =
+	bainangua::bng_expected<bool> singleLoopQueueTestResult =
 		wrapRenderLoopRow("Basic CommandQueue Test",
 			bainangua::CreateQueueFunnels()
 			| bainangua::SimpleGraphicsCommandPoolStage()
 			| bainangua::PrimaryGraphicsCommandBuffersStage(1)
-			| BasicCommandQueueTest()
+			| BasicCommandQueueTest(1)
 		);
-	REQUIRE(queueTestResult == bainangua::bng_expected<bool>(true));
+	REQUIRE(singleLoopQueueTestResult == bainangua::bng_expected<bool>(true));
+
+	bainangua::bng_expected<bool> multiLoopQueueTestResult =
+		wrapRenderLoopRow("Basic CommandQueue Test",
+			bainangua::CreateQueueFunnels()
+			| bainangua::SimpleGraphicsCommandPoolStage()
+			| bainangua::PrimaryGraphicsCommandBuffersStage(1)
+			| BasicCommandQueueTest(10)
+		);
+	REQUIRE(multiLoopQueueTestResult == bainangua::bng_expected<bool>(true));
+
 }
 

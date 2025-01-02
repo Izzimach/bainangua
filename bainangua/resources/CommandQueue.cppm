@@ -23,14 +23,15 @@ namespace bainangua {
 /**
 * Provides a controlled channel to use for submitting commands to a queue.
 * Multithread access is controlled via a coro mutex. Also provides a coroutine-friendly way
-* to wait on command completion.
+* to wait on command completion using a mini-reactor that waits on vkFence objects and calls
+* the appropriate coro::task when the fence is signaled.
 * 
 */
 export
 class CommandQueueFunnel
 {
 public:
-	CommandQueueFunnel(vk::Device d, vk::Queue q) : device_(d), queue_(q), fence_awaiter_thread_(std::bind(&CommandQueueFunnel::fence_awaiter, this)) {}
+	CommandQueueFunnel(vk::Device d, vk::Queue q) : device_(d), queue_(q), fence_awaiter_thread_(std::bind(&CommandQueueFunnel::fence_reactor, this)) {}
 	~CommandQueueFunnel() {
 		cleanup_time_ = true;
 		work_available_.notify_one();
@@ -87,7 +88,7 @@ private:
 		fence_pool_.push_back(releaseme);
 	}
 
-	void fence_awaiter() {
+	void fence_reactor() {
 		std::unique_lock lk(access_mutex_);
 		std::vector<vk::Fence> fences;
 
@@ -105,7 +106,7 @@ private:
 			}
 			lk.unlock();
 
-			vk::Result waitResult = device_.waitForFences(fences.size(), fences.data(), false, 1000); // 1mS timeout
+			vk::Result waitResult = device_.waitForFences(static_cast<uint32_t>(fences.size()), fences.data(), false, 1000); // 1mS timeout
 			if (waitResult != vk::Result::eSuccess) {
 				// error
 			}
@@ -139,7 +140,7 @@ private:
 	vk::Queue queue_;
 	std::vector<vk::Fence> fence_pool_;
 	std::vector<std::pair<vk::Fence, coro::task<void>>> fence_waiters_;
-	bool cleanup_time_{ false };
+	std::atomic<bool> cleanup_time_{ false };
 	std::thread fence_awaiter_thread_;
 };
 
