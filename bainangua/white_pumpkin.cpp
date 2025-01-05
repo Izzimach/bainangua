@@ -96,8 +96,8 @@ struct NoRenderLoop {
 
 	template<typename Row>
 	constexpr tl::expected<int, std::string> applyRow(Row r) {
-		bainangua::VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
-		s.endOfFrame();
+		std::coroutine_handle<> endOfFrame = boost::hana::at_key(r, BOOST_HANA_STRING("endOfFrameCallback"));
+		endOfFrame();
 		return 0;
 	}
 };
@@ -153,7 +153,11 @@ struct UpdateUniformBuffer {
 
 template <typename Row>
 auto renderLoop (Row r) -> bainangua::bng_expected<bool> {
-	bainangua::VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+	vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+	vk::Queue graphicsQueue = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsQueue"));
+	vk::Queue presentQueue = boost::hana::at_key(r, BOOST_HANA_STRING("presentQueue"));
+	GLFWwindow* glfwWindow = boost::hana::at_key(r, BOOST_HANA_STRING("glfwWindow"));
+	std::coroutine_handle<> endOfFrame = boost::hana::at_key(r, BOOST_HANA_STRING("endOfFrameCallback"));
 	std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 	bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
 
@@ -170,10 +174,10 @@ auto renderLoop (Row r) -> bainangua::bng_expected<bool> {
 
 	size_t multiFrameIndex = 0;
 
-	while (!glfwWindowShouldClose(s.glfwWindow)) {
+	while (!glfwWindowShouldClose(glfwWindow)) {
 
 		tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result> result =
-			bainangua::drawOneFrame(s, presenterptr, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
+			bainangua::drawOneFrame(device, graphicsQueue, presentQueue, presenterptr, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandbuffer, vk::Framebuffer framebuffer) {
 				updateUniformBuffer(presenterptr->swapChainExtent2D_, uniformBuffers[multiFrameIndex]);
 				recordCommandBuffer(commandbuffer, framebuffer, presenterptr->swapChainExtent2D_, pipeline, vertexBuffer, indexBuffer, descriptorSets[multiFrameIndex]);
 				})
@@ -181,18 +185,18 @@ auto renderLoop (Row r) -> bainangua::bng_expected<bool> {
 				presenterptr = newPresenter;
 
 				glfwPollEvents();
-				s.endOfFrame();
+				endOfFrame();
 				multiFrameIndex = (multiFrameIndex + 1) % bainangua::MultiFrameCount;
 
 				return tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result>(newPresenter);
 			});
 		if (!result) {
-			s.vkDevice.waitIdle();
+			device.waitIdle();
 			return formatVkResultError("error presenting frame", result.error());
 		}
 	}
 
-	s.vkDevice.waitIdle();
+	device.waitIdle();
 
 	return 0;
 };
@@ -210,9 +214,12 @@ struct InnerFunction {
 	using return_type = bainangua::bng_expected<bool>;
 
 	template <typename Row>
+		requires   RowType::has_named_field<Row, BOOST_HANA_STRING("device"), vk::Device>
+				&& RowType::has_named_field<Row, BOOST_HANA_STRING("commandBuffers"), std::vector<vk::CommandBuffer>>
+				&& RowType::has_named_field<Row, BOOST_HANA_STRING("graphicsFunnel"), std::shared_ptr<bainangua::CommandQueueFunnel>>
 	constexpr bainangua::bng_expected<bool> applyRow(Row r) {
-		bainangua::VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
-		std::pmr::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("commandBuffers"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+		std::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("commandBuffers"));
 		std::shared_ptr<bainangua::CommandQueueFunnel> graphicsQueue = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsFunnel"));
 
 		vk::CommandBuffer cmd = commandBuffers[0];
@@ -239,8 +246,8 @@ struct InnerFunction {
 
 		coro::sync_wait(awaiterTask(e));
 
-		s.vkDevice.waitIdle();
-
+		device.waitIdle();
+		
 		return true;
 	}
 };
@@ -251,38 +258,37 @@ int WINAPI wWinMain(HINSTANCE , HINSTANCE , PWSTR , int )
 int main()
 #endif
 {
-	bainangua::bng_expected<bool> programResult =
-	bainangua::createVulkanContext<bainangua::bng_expected<bool>>(
-		bainangua::VulkanContextConfig{
-			.AppName = "My Test App",
-			.requiredExtensions = {
-				VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
-				VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-			},
-#if NDEBUG
-			.useValidation = false,
-#else
-			.useValidation = true,
-#endif
-		},
-		[=](bainangua::VulkanContext& s) -> bainangua::bng_expected<bool> {
-			auto loaderDirectory = boost::hana::make_map(
-				bainangua::shaderLoader
-			);
-
-			auto f = 
-				bainangua::ResourceLoaderStage(loaderDirectory)
-				| bainangua::CreateQueueFunnels()
-				| bainangua::SimpleGraphicsCommandPoolStage()
-				| bainangua::PrimaryGraphicsCommandBuffersStage(1)
-				| InnerFunction();
-
-			auto r = boost::hana::make_map(
-				boost::hana::make_pair(BOOST_HANA_STRING("context"), s)
-			);
-			return f.applyRow(r).transform([](auto) { return true; });
-		}
+	auto config = boost::hana::make_map(
+		boost::hana::make_pair(BOOST_HANA_STRING("config"), bainangua::VulkanContextConfig{
+				.AppName = "My Test App",
+				.requiredExtensions = {
+					VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
+					VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
+				},
+	#if NDEBUG
+				.useValidation = false,
+	#else
+				.useValidation = true,
+	#endif
+			}
+		)
 	);
+
+	auto loaderDirectory = boost::hana::make_map(
+		bainangua::shaderLoader
+	);
+
+	auto loaderStorage = createLoaderStorage(loaderDirectory);
+
+	auto program =
+		bainangua::QuickCreateContext()
+		| bainangua::ResourceLoaderStage(loaderDirectory, loaderStorage)
+		| bainangua::CreateQueueFunnels()
+		| bainangua::SimpleGraphicsCommandPoolStage()
+		| bainangua::PrimaryGraphicsCommandBuffersStage(1)
+		| InnerFunction();
+
+	bainangua::bng_expected<bool> programResult = program.applyRow(config);
 
 	if (programResult.has_value()) {
 		return 0;

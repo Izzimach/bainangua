@@ -11,9 +11,9 @@ import VulkanContext;
 
 namespace bainangua {
 
-export inline vk::CommandPoolCreateInfo defaultCommandPool(const VulkanContext& s)
+export inline vk::CommandPoolCreateInfo defaultCommandPool(uint32_t graphicsQueueFamilyIndex)
 {
-	return vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, s.graphicsQueueFamilyIndex);
+	return vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, graphicsQueueFamilyIndex);
 }
 
 export inline vk::CommandBufferAllocateInfo defaultCommandBuffer(vk::CommandPool p)
@@ -21,60 +21,60 @@ export inline vk::CommandBufferAllocateInfo defaultCommandBuffer(vk::CommandPool
 	return vk::CommandBufferAllocateInfo(p, vk::CommandBufferLevel::ePrimary, 1);
 }
 
-export void withCommandPool(const VulkanContext& s, const vk::CommandPoolCreateInfo& info, std::function<void(vk::CommandPool)> wrapped)
+export void withCommandPool(vk::Device device, const vk::CommandPoolCreateInfo& info, std::function<void(vk::CommandPool)> wrapped)
 {
-	vk::CommandPool pool = s.vkDevice.createCommandPool(info);
+	vk::CommandPool pool = device.createCommandPool(info);
 	try {
 		wrapped(pool);
 	}
 	catch (std::exception &e) {
-		s.vkDevice.destroyCommandPool(pool);
+		device.destroyCommandPool(pool);
 		throw e;
 	}
-	s.vkDevice.destroyCommandPool(pool);
+	device.destroyCommandPool(pool);
 }
 
-export void withCommandBuffers(const VulkanContext& s, const vk::CommandBufferAllocateInfo& info, std::function<void(std::vector<vk::CommandBuffer> &)> wrapped)
+export void withCommandBuffers(vk::Device device, const vk::CommandBufferAllocateInfo& info, std::function<void(std::vector<vk::CommandBuffer> &)> wrapped)
 {
-	std::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers(info);
+	std::vector<vk::CommandBuffer> buffers = device.allocateCommandBuffers(info);
 	try {
 		wrapped(buffers);
 	}
 	catch (const std::exception& e) {
-		s.vkDevice.freeCommandBuffers(info.commandPool, buffers);
+		device.freeCommandBuffers(info.commandPool, buffers);
 		throw e;
 	}
-	s.vkDevice.freeCommandBuffers(info.commandPool, buffers);
+	device.freeCommandBuffers(info.commandPool, buffers);
 }
 
-export void withCommandBuffer(const VulkanContext& s, vk::CommandPool pool, std::function<void(vk::CommandBuffer)> wrapped)
+export void withCommandBuffer(vk::Device device, vk::CommandPool pool, std::function<void(vk::CommandBuffer)> wrapped)
 {
-	std::vector<vk::CommandBuffer> buffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
+	std::vector<vk::CommandBuffer> buffers = device.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
 	try {
 		wrapped(buffers[0]);
 	}
 	catch (std::exception& e) {
-		s.vkDevice.freeCommandBuffers(pool, buffers);
+		device.freeCommandBuffers(pool, buffers);
 		throw e;
 	}
-	s.vkDevice.freeCommandBuffers(pool, buffers);
+	device.freeCommandBuffers(pool, buffers);
 }
 
-export auto submitCommand(const VulkanContext& s, vk::CommandPool pool, std::function<vk::Result(vk::CommandBuffer)> commands) -> vk::Result {
-	std::vector<vk::CommandBuffer> commandBuffers = s.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
+export auto submitCommand(vk::Device device, vk::Queue graphicsQueue, vk::CommandPool pool, std::function<vk::Result(vk::CommandBuffer)> commands) -> vk::Result {
+	std::vector<vk::CommandBuffer> commandBuffers = device.allocateCommandBuffers(vk::CommandBufferAllocateInfo(pool, vk::CommandBufferLevel::ePrimary, 1));
 
 	vk::CommandBuffer commandBuffer = commandBuffers[0];
 
 	vk::CommandBufferBeginInfo beginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
 	vk::Result commandBeginResult = commandBuffer.begin(&beginInfo);
 	if (commandBeginResult != vk::Result::eSuccess) {
-		s.vkDevice.freeCommandBuffers(pool, commandBuffers);
+		device.freeCommandBuffers(pool, commandBuffers);
 		return commandBeginResult;
 	}
 
 	auto wrappedResult = commands(commandBuffer);
 	if (wrappedResult != vk::Result::eSuccess) {
-		s.vkDevice.freeCommandBuffers(pool, commandBuffers);
+		device.freeCommandBuffers(pool, commandBuffers);
 		return wrappedResult;
 	}
 
@@ -82,10 +82,10 @@ export auto submitCommand(const VulkanContext& s, vk::CommandPool pool, std::fun
 
 	vk::SubmitInfo submitInfo(0, nullptr, nullptr, 1, &commandBuffer, 0, nullptr);
 
-	s.graphicsQueue.submit(submitInfo);
-	s.graphicsQueue.waitIdle();
+	graphicsQueue.submit(submitInfo);
+	graphicsQueue.waitIdle();
 
-	s.vkDevice.freeCommandBuffers(pool, commandBuffers);
+	device.freeCommandBuffers(pool, commandBuffers);
 
 	return vk::Result::eSuccess;
 }
@@ -97,15 +97,19 @@ export struct SimpleGraphicsCommandPoolStage {
 	using return_type_transformer = WrappedReturnType;
 
 	template <typename RowFunction, typename Row>
+	requires   RowType::has_named_field<Row, BOOST_HANA_STRING("graphicsQueueFamilyIndex"), uint32_t>
+			&& RowType::has_named_field<Row, BOOST_HANA_STRING("device"), vk::Device>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 
-		vk::CommandPool pool = context.vkDevice.createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, context.graphicsQueueFamilyIndex));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+		uint32_t graphicsQueueFamilyIndex = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsQueueFamilyIndex"));
+
+		vk::CommandPool pool = device.createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, graphicsQueueFamilyIndex));
 
 		auto rWithPool = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("commandPool"), pool));
 		auto result = f.applyRow(rWithPool);
 
-		context.vkDevice.destroyCommandPool(pool);
+		device.destroyCommandPool(pool);
 
 		return result;
 	}
@@ -122,11 +126,13 @@ export struct PrimaryGraphicsCommandBuffersStage {
 	using return_type_transformer = WrappedReturnType;
 
 	template <typename RowFunction, typename Row>
-	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		requires RowType::has_named_field<Row, BOOST_HANA_STRING("device"), vk::Device>
+	          && RowType::has_named_field<Row, BOOST_HANA_STRING("commandPool"), vk::CommandPool>
+		constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 		vk::CommandPool commandPool = boost::hana::at_key(r, BOOST_HANA_STRING("commandPool"));
 
-		std::vector<vk::CommandBuffer> commandBuffers = context.vkDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(commandPool, vk::CommandBufferLevel::ePrimary, count_));
+		std::vector<vk::CommandBuffer> commandBuffers = device.allocateCommandBuffers(vk::CommandBufferAllocateInfo(commandPool, vk::CommandBufferLevel::ePrimary, count_));
 
 		auto rWithBuffers = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("commandBuffers"), commandBuffers));
 		auto result = f.applyRow(rWithBuffers);

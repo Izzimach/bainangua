@@ -444,7 +444,7 @@ struct AssemblePipelineBundle {
 export
 bng_expected<PipelineBundle> createNoVertexPipeline(std::shared_ptr<PresentationLayer> presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
-	vk::Device device = presentation->swapChainDevice_;
+	vk::Device device = presentation->device_;
 
 	auto pipeRow = boost::hana::make_map(
 		boost::hana::make_pair(BOOST_HANA_STRING("device"), device),
@@ -475,10 +475,10 @@ struct NoVertexPipelineStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 		std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 
-		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createNoVertexPipeline(presenterptr, (shaderPath_ / "Basic.vert_spv"), (shaderPath_ / "Basic.frag_spv")));
+		bng_expected<bainangua::PipelineBundle> pipelineResult(bainangua::createNoVertexPipeline(presenterptr, (shaderPath_ / "Basic.vert_spv"), (shaderPath_ / "Basic.frag_spv")));
 		if (!pipelineResult.has_value()) {
 			return tl::make_unexpected(pipelineResult.error());
 		}
@@ -489,7 +489,7 @@ struct NoVertexPipelineStage {
 		auto rWithPipeline = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("pipelineBundle"), pipeline));
 		auto result = f.applyRow(rWithPipeline);
 
-		destroyPipeline(context.vkDevice, pipeline);
+		destroyPipeline(device, pipeline);
 		return result;
 	}
 };
@@ -498,7 +498,7 @@ struct NoVertexPipelineStage {
 export
 tl::expected<PipelineBundle, bng_errorobject> createVTVertexPipeline(std::shared_ptr<PresentationLayer> presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
-	vk::Device device = presentation->swapChainDevice_;
+	vk::Device device = presentation->device_;
 
 	auto pipeRow = boost::hana::make_map(
 		boost::hana::make_pair(BOOST_HANA_STRING("device"), device),
@@ -529,7 +529,7 @@ struct VTVertexPipelineStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 		std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 
 		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createVTVertexPipeline(presenterptr, (shaderPath_ / "PosColor.vert_spv"), (shaderPath_ / "PosColor.frag_spv")));
@@ -543,7 +543,7 @@ struct VTVertexPipelineStage {
 		auto rWithPipeline = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("pipelineBundle"), pipeline));
 		auto result = f.applyRow(rWithPipeline);
 
-		destroyPipeline(context.vkDevice, pipeline);
+		destroyPipeline(device, pipeline);
 		return result;
 	}
 };
@@ -553,7 +553,7 @@ struct VTVertexPipelineStage {
 export
 tl::expected<PipelineBundle, bng_errorobject> createMVPVertexPipeline(std::shared_ptr<PresentationLayer> presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
-	vk::Device device = presentation->swapChainDevice_;
+	vk::Device device = presentation->device_;
 
 	auto pipeRow = boost::hana::make_map(
 		boost::hana::make_pair(BOOST_HANA_STRING("device"), device),
@@ -598,7 +598,7 @@ struct MVPPipelineStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 		std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 
 		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createMVPVertexPipeline(presenterptr, (shaderPath_ / "PosColorMVP.vert_spv"), (shaderPath_ / "PosColor.frag_spv")));
@@ -612,7 +612,7 @@ struct MVPPipelineStage {
 		auto rWithPipeline = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("pipelineBundle"), pipeline));
 		auto result = f.applyRow(rWithPipeline);
 
-		destroyPipeline(context.vkDevice, pipeline);
+		destroyPipeline(device, pipeline);
 		return result;
 	}
 };
@@ -620,7 +620,7 @@ struct MVPPipelineStage {
 export
 tl::expected<PipelineBundle, bng_errorobject> createUBOVertexPipeline(std::shared_ptr<PresentationLayer> presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
-	vk::Device device = presentation->swapChainDevice_;
+	vk::Device device = presentation->device_;
 
 	auto pipeRow = boost::hana::make_map(
 		boost::hana::make_pair(BOOST_HANA_STRING("device"), device),
@@ -652,7 +652,7 @@ struct UBOPipelineStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 		std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 
 		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createUBOVertexPipeline(presenterptr, (shaderPath_ / "PosColorMVP.vert_spv"), (shaderPath_ / "PosColor.frag_spv")));
@@ -666,7 +666,7 @@ struct UBOPipelineStage {
 		auto rWithPipeline = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("pipelineBundle"), pipeline));
 		auto result = f.applyRow(rWithPipeline);
 
-		destroyPipeline(context.vkDevice, pipeline);
+		destroyPipeline(device, pipeline);
 		return result;
 	}
 };
@@ -678,7 +678,7 @@ struct UBOPipelineStage {
 export
 tl::expected<PipelineBundle, bng_errorobject> createTexVertexPipeline(std::shared_ptr<PresentationLayer> presentation, std::filesystem::path vertexShaderFile, std::filesystem::path fragmentShaderFile)
 {
-	vk::Device device = presentation->swapChainDevice_;
+	vk::Device device = presentation->device_;
 
 	auto pipeRow = boost::hana::make_map(
 		boost::hana::make_pair(BOOST_HANA_STRING("device"), device),
@@ -710,7 +710,7 @@ struct TexPipelineStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 		std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 
 		tl::expected<bainangua::PipelineBundle, std::string> pipelineResult(bainangua::createTexVertexPipeline(presenterptr, (shaderPath_ / "TexturedMVP.vert_spv"), (shaderPath_ / "Textured.frag_spv")));
@@ -724,13 +724,9 @@ struct TexPipelineStage {
 		auto rWithPipeline = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("pipelineBundle"), pipeline));
 		auto result = f.applyRow(rWithPipeline);
 
-		destroyPipeline(context.vkDevice, pipeline);
+		destroyPipeline(device, pipeline);
 		return result;
 	}
 };
-
-
-
-
 
 }

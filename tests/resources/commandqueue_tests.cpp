@@ -32,7 +32,7 @@ struct BasicCommandQueueTest {
 
 	template <typename Row>
 	constexpr bainangua::bng_expected<bool> applyRow(Row r) {
-		bainangua::VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 		std::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("commandBuffers"));
 		std::shared_ptr<bainangua::CommandQueueFunnel> graphicsQueue = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsFunnel"));
 
@@ -64,7 +64,7 @@ struct BasicCommandQueueTest {
 			e.reset();
 		}
 
-		s.vkDevice.waitIdle();
+		device.waitIdle();
 
 		return true;
 	}
@@ -73,23 +73,23 @@ struct BasicCommandQueueTest {
 
 TEST_CASE("CommandQueue", "[CommandQueue]")
 {
-	bainangua::bng_expected<bool> singleLoopQueueTestResult =
-		wrapRenderLoopRow("Basic CommandQueue Test",
-			bainangua::CreateQueueFunnels()
-			| bainangua::SimpleGraphicsCommandPoolStage()
-			| bainangua::PrimaryGraphicsCommandBuffersStage(1)
-			| BasicCommandQueueTest(1)
-		);
-	REQUIRE(singleLoopQueueTestResult == bainangua::bng_expected<bool>(true));
+	auto program =
+		bainangua::QuickCreateContext()
+		| bainangua::CreateQueueFunnels()
+		| bainangua::SimpleGraphicsCommandPoolStage()
+		| bainangua::PrimaryGraphicsCommandBuffersStage(1)
+		| BasicCommandQueueTest(1);
 
-	bainangua::bng_expected<bool> multiLoopQueueTestResult =
-		wrapRenderLoopRow("Basic CommandQueue Test",
-			bainangua::CreateQueueFunnels()
-			| bainangua::SimpleGraphicsCommandPoolStage()
-			| bainangua::PrimaryGraphicsCommandBuffersStage(1)
-			| BasicCommandQueueTest(10)
-		);
-	REQUIRE(multiLoopQueueTestResult == bainangua::bng_expected<bool>(true));
+	REQUIRE(program.applyRow(testConfig()) == bainangua::bng_expected<bool>(true));
+
+	auto program10 =
+		bainangua::QuickCreateContext()
+		| bainangua::CreateQueueFunnels()
+		| bainangua::SimpleGraphicsCommandPoolStage()
+		| bainangua::PrimaryGraphicsCommandBuffersStage(1)
+		| BasicCommandQueueTest(10);
+
+	REQUIRE(program10.applyRow(testConfig()) == bainangua::bng_expected<bool>(true));
 
 }
 

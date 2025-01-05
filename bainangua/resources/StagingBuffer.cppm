@@ -158,10 +158,10 @@ struct CreateStagingBuffer {
 
 	template <typename RowFunction, typename Row>
 	constexpr bng_expected<bool> wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
 		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+		VmaAllocator vmaAllocator = boost::hana::at_key(r, BOOST_HANA_STRING("vmaAllocator"));
 
-		StagingBufferPool pool(context.vmaAllocator);
+		StagingBufferPool pool(vmaAllocator);
 		bng_expected<StagingBuffer<BufferType>> buffer = coro::sync_wait(pool.acquireStagingBufferTask(requestSize));
 		if (!buffer.has_value()) {
 			return bng_unexpected(buffer.error());

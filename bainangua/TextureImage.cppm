@@ -25,9 +25,7 @@ export struct ImageBundle {
 	VmaAllocation allocation;
 };
 
-export auto createTextureImage(const VulkanContext& s, vk::CommandPool pool, std::filesystem::path imagePath) -> bng_expected<ImageBundle> {
-	VmaAllocator allocator = s.vmaAllocator;
-
+export auto createTextureImage(vk::Device device, vk::Queue graphicsQueue, VmaAllocator vmaAllocator, vk::CommandPool pool, std::filesystem::path imagePath) -> bng_expected<ImageBundle> {
 	int texWidth, texHeight, texChannels;
 	std::u8string utf8Path = imagePath.u8string();
 	stbi_uc* pixels = stbi_load(reinterpret_cast<const char*>(utf8Path.c_str()), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -56,14 +54,14 @@ export auto createTextureImage(const VulkanContext& s, vk::CommandPool pool, std
 	};
 	VkBuffer stagingBuffer;
 	VmaAllocation stagingAllocation;
-	auto stageResult = vmaCreateBuffer(allocator, &bufferCreateInfo, &vmaAllocateInfo, &stagingBuffer, &stagingAllocation, nullptr);
+	auto stageResult = vmaCreateBuffer(vmaAllocator, &bufferCreateInfo, &vmaAllocateInfo, &stagingBuffer, &stagingAllocation, nullptr);
 	if (stageResult != VK_SUCCESS) {
 		return tl::make_unexpected("createTextureIndex: vmaCreateBuffer for staging buffer failed");
 	}
 	VmaAllocationInfo StagingInfo;
-	vmaGetAllocationInfo(allocator, stagingAllocation, &StagingInfo);
+	vmaGetAllocationInfo(vmaAllocator, stagingAllocation, &StagingInfo);
 	if (StagingInfo.pMappedData == nullptr) {
-		vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
+		vmaDestroyBuffer(vmaAllocator, stagingBuffer, stagingAllocation);
 		return tl::make_unexpected("createTextureIndex: vmaCreateBuffer for staging buffer not mapped");
 	}
 
@@ -91,13 +89,13 @@ export auto createTextureImage(const VulkanContext& s, vk::CommandPool pool, std
 	};
 	VkImage finalImage;
 	VmaAllocation finalAllocation;
-	auto imageResult = vmaCreateImage(allocator, &imageCreateInfo, &imageVmaAllocateInfo, &finalImage, &finalAllocation, nullptr);
+	auto imageResult = vmaCreateImage(vmaAllocator, &imageCreateInfo, &imageVmaAllocateInfo, &finalImage, &finalAllocation, nullptr);
 	if (imageResult != VK_SUCCESS) {
-		vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
+		vmaDestroyBuffer(vmaAllocator, stagingBuffer, stagingAllocation);
 		return tl::make_unexpected("createTextureIndex: vmaCreateImage for final image failed");
 	}
 
-	auto copyResult = submitCommand(s, pool, [&](vk::CommandBuffer buffer) {
+	auto copyResult = submitCommand(device, graphicsQueue, pool, [&](vk::CommandBuffer buffer) {
 		vk::ImageMemoryBarrier copyBarrier(
 			{},
 			vk::AccessFlagBits::eTransferWrite,
@@ -134,15 +132,15 @@ export auto createTextureImage(const VulkanContext& s, vk::CommandPool pool, std
 		
 		return vk::Result::eSuccess;
 	});
-	vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
+	vmaDestroyBuffer(vmaAllocator, stagingBuffer, stagingAllocation);
 
 	if (copyResult != vk::Result::eSuccess) {
-		vmaDestroyImage(allocator, finalImage, finalAllocation);
+		vmaDestroyImage(vmaAllocator, finalImage, finalAllocation);
 		return formatVkResultError("Error copying from staging buffer to final image: {}", copyResult);
 	}
 
 	vk::ImageViewCreateInfo viewInfo({}, finalImage, vk::ImageViewType::e2D, vk::Format::eR8G8B8A8Srgb, vk::ComponentMapping(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1), nullptr);
-	vk::ImageView iv = s.vkDevice.createImageView(viewInfo);
+	vk::ImageView iv = device.createImageView(viewInfo);
 
 
 	return ImageBundle{
@@ -156,9 +154,9 @@ export auto createTextureImage(const VulkanContext& s, vk::CommandPool pool, std
 }
 
 export
-auto destroyTextureImage(const VulkanContext& s, ImageBundle image) -> void {
-	s.vkDevice.destroyImageView(image.imageView);
-	vmaDestroyImage(s.vmaAllocator, image.image, image.allocation);
+auto destroyTextureImage(vk::Device device, VmaAllocator vmaAllocator, ImageBundle image) -> void {
+	device.destroyImageView(image.imageView);
+	vmaDestroyImage(vmaAllocator, image.image, image.allocation);
 }
 
 export struct FromFileTextureImageStage {
@@ -173,10 +171,12 @@ export struct FromFileTextureImageStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+		VmaAllocator vmaAllocator = boost::hana::at_key(r, BOOST_HANA_STRING("vmaAllocator"));
+		vk::Queue graphicsQueue = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsQueue"));
 		vk::CommandPool commandPool = boost::hana::at_key(r, BOOST_HANA_STRING("commandPool"));
 
-		auto loadResult = createTextureImage(context, commandPool, path_);
+		auto loadResult = createTextureImage(device, graphicsQueue, vmaAllocator,commandPool, path_);
 		if (!loadResult.has_value()) {
 			return tl::make_unexpected(loadResult.error());
 		}
@@ -185,15 +185,15 @@ export struct FromFileTextureImageStage {
 		auto rWithTextureImage = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("textureImage"), textureImage));
 		auto result = f.applyRow(rWithTextureImage);
 
-		bainangua::destroyTextureImage(context, textureImage);
+		bainangua::destroyTextureImage(device, vmaAllocator, textureImage);
 
 		return result;
 	}
 };
 
-export auto createTextureSampler(const VulkanContext& s) -> bng_expected<vk::Sampler> {
+export auto createTextureSampler(vk::Device device, vk::PhysicalDevice physicalDevice) -> bng_expected<vk::Sampler> {
 	vk::PhysicalDeviceProperties physicalProperties;
-	s.vkPhysicalDevice.getProperties(&physicalProperties);
+	physicalDevice.getProperties(&physicalProperties);
 
 	vk::SamplerCreateInfo samplerCreateInfo(
 		{},
@@ -215,7 +215,7 @@ export auto createTextureSampler(const VulkanContext& s) -> bng_expected<vk::Sam
 	);
 
 	vk::Sampler sampler;
-	vk::Result createResult = s.vkDevice.createSampler(&samplerCreateInfo, nullptr, &sampler);
+	vk::Result createResult = device.createSampler(&samplerCreateInfo, nullptr, &sampler);
 	if (createResult != vk::Result::eSuccess) {
 		return bainangua::formatVkResultError("createTextureSampler", createResult);
 	}
@@ -223,11 +223,11 @@ export auto createTextureSampler(const VulkanContext& s) -> bng_expected<vk::Sam
 	return sampler;
 }
 
-export auto linkImageToDescriptorSets(const VulkanContext& s, ImageBundle image, vk::Sampler sampler, std::vector<vk::DescriptorSet> descriptors) -> bng_expected<void> {
+export auto linkImageToDescriptorSets(vk::Device device, ImageBundle image, vk::Sampler sampler, std::vector<vk::DescriptorSet> descriptors) -> bng_expected<void> {
 	for (auto descriptor : descriptors) {
 		vk::DescriptorImageInfo imageInfo(sampler, image.imageView, vk::ImageLayout::eShaderReadOnlyOptimal);
 		vk::WriteDescriptorSet descriptorWrite(descriptor, 1, 0, 1, vk::DescriptorType::eCombinedImageSampler, &imageInfo, nullptr, nullptr);
-		s.vkDevice.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+		device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
 	}
 
 	return tl::expected<void, bng_errorobject>();
@@ -241,14 +241,15 @@ export struct Basic2DSamplerStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+		vk::PhysicalDevice physicalDevice = boost::hana::at_key(r, BOOST_HANA_STRING("physicalDevice"));
 
-		return createTextureSampler(context)
+		return createTextureSampler(device, physicalDevice)
 			.and_then([&](vk::Sampler sampler) {
 				auto rWithSampler = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("imageSampler"), sampler));
 				auto result = f.applyRow(rWithSampler);
 
-				context.vkDevice.destroySampler(sampler);
+				device.destroySampler(sampler);
 
 				return result;
 			});
@@ -263,12 +264,12 @@ export struct LinkImageToDescriptorsStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 		std::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
 		const ImageBundle image = boost::hana::at_key(r, BOOST_HANA_STRING("textureImage"));
 		vk::Sampler sampler = boost::hana::at_key(r, BOOST_HANA_STRING("imageSampler"));
 
-		auto linkResult = linkImageToDescriptorSets(context, image, sampler, descriptorSets);
+		auto linkResult = linkImageToDescriptorSets(device, image, sampler, descriptorSets);
 		if (!linkResult) {
 			return tl::make_unexpected(linkResult.error());
 		}

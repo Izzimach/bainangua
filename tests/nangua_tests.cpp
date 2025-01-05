@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/benchmark/catch_benchmark.hpp>
 
+#include <coroutine>
 #include <filesystem>
 
 
@@ -18,18 +19,19 @@ import UniformBuffer;
 import VertBuffer;
 import VulkanContext;
 
+
 namespace bainangua_BaseTests {
 
 std::filesystem::path ShaderPath = SHADER_DIR;
 
 struct NoRenderLoop {
 	using row_tag = RowType::RowFunctionTag;
-	using return_type = tl::expected<int, std::string>;
+	using return_type = bainangua::bng_expected<int>;
 
 	template<typename Row>
-	constexpr tl::expected<int, std::string> applyRow(Row r) {
-		bainangua::VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
-		s.endOfFrame();
+	constexpr bainangua::bng_expected<int> applyRow(Row r) {
+		std::coroutine_handle<> endOfFrame = boost::hana::at_key(r, BOOST_HANA_STRING("endOfFrameCallback"));
+		endOfFrame();
 		return 0;
 	}
 };
@@ -43,7 +45,6 @@ struct DrawNoVertexGeometry {
 	constexpr void applyRow(Row r) {
 		vk::CommandBuffer buffer = boost::hana::at_key(r, BOOST_HANA_STRING("primaryCommandBuffer"));
 		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
-		//size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
 
 		buffer.draw(3, 1, 0, 0);
 	}
@@ -58,7 +59,6 @@ struct DrawVertexGeometry {
 		vk::CommandBuffer buffer = boost::hana::at_key(r, BOOST_HANA_STRING("primaryCommandBuffer"));
 		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
 		auto [vertexBuffer, bufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("vertexBuffer"));
-		//size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
 
 		vk::Buffer vertexBuffers[] = { vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
@@ -80,7 +80,6 @@ struct DrawIndexedVertexGeometry {
 		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
 		auto [vertexBuffer, bufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("indexedVertexBuffer"));
 		auto [indexBuffer, indexBufferMemory] = boost::hana::at_key(r, BOOST_HANA_STRING("indexBuffer"));
-		//size_t multiFrameIndex = boost::hana::at_key(r, BOOST_HANA_STRING("multiFrameIndex"));
 
 		vk::Buffer vertexBuffers[] = { vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
@@ -139,129 +138,128 @@ struct UpdateUniformBuffer {
 
 
 
-
-
-
 TEST_CASE("VulkanContext", "[Basic]")
 {
 	REQUIRE(
-		wrapRenderLoopRow("Basic Test", NoRenderLoop()) == bainangua::bng_expected<int>(0)
+		(bainangua::QuickCreateContext() | NoRenderLoop()).applyRow(testConfig()) == bainangua::bng_expected<int>(0)
 	);
 }
 
 TEST_CASE("PresentationLayer", "[Basic]")
 {
+	auto program =
+		bainangua::QuickCreateContext()
+		| bainangua::PresentationLayerStage()
+		| NoRenderLoop();
+
 	REQUIRE(
-		wrapRenderLoopRow(
-			"PresentationLayer Pipeline Test App", 
-			bainangua::PresentationLayerStage() | NoRenderLoop()
-		)
+		program.applyRow(testConfig())
 		== bainangua::bng_expected<int>(0)
 	);
 }
 
 TEST_CASE("OneFrame", "[Basic][Rendering]")
 {
+	auto program =
+		bainangua::QuickCreateContext()
+		| bainangua::PresentationLayerStage()
+		| bainangua::NoVertexPipelineStage(ShaderPath)
+		| bainangua::SimpleGraphicsCommandPoolStage()
+		| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
+		| bainangua::StandardMultiFrameLoop(10)
+		| bainangua::BasicRendering()
+		| DrawNoVertexGeometry();
+
 	REQUIRE(
-		wrapRenderLoopRow(
-			"OneFrame Pipeline Test App",
-			bainangua::PresentationLayerStage()
-			| bainangua::NoVertexPipelineStage(ShaderPath)
-			| bainangua::SimpleGraphicsCommandPoolStage()
-			| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
-			| bainangua::StandardMultiFrameLoop(10)
-			| bainangua::BasicRendering()
-			| DrawNoVertexGeometry()
-		)
-		== (bainangua::bng_expected<bool>(true))
+		program.applyRow(testConfig()) == (bainangua::bng_expected<bool>(true))
 	);
 }
 
 TEST_CASE("VertexBuffer","[Rendering]")
 {
+	auto program =
+		bainangua::QuickCreateContext()
+		| bainangua::PresentationLayerStage()
+		| bainangua::VTVertexPipelineStage(ShaderPath)
+		| bainangua::SimpleGraphicsCommandPoolStage()
+		| bainangua::GPUVertexBufferStage()
+		| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
+		| bainangua::StandardMultiFrameLoop(10)
+		| bainangua::BasicRendering()
+		| DrawVertexGeometry();
+
 	REQUIRE(
-		wrapRenderLoopRow(
-			"VertexBuffer Pipeline Test App",
-			bainangua::PresentationLayerStage()
-			| bainangua::VTVertexPipelineStage(ShaderPath)
-			| bainangua::SimpleGraphicsCommandPoolStage()
-			| bainangua::GPUVertexBufferStage()
-			| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
-			| bainangua::StandardMultiFrameLoop(10)
-			| bainangua::BasicRendering()
-			| DrawVertexGeometry()
-		)
-		== (bainangua::bng_expected<bool>(true))
+		program.applyRow(testConfig()) == (bainangua::bng_expected<bool>(true))
 	);
 }
 
 TEST_CASE("IndexBuffer", "[Rendering]")
 {
+	auto program =
+		bainangua::QuickCreateContext()
+		| bainangua::PresentationLayerStage()
+		| bainangua::VTVertexPipelineStage(ShaderPath)
+		| bainangua::SimpleGraphicsCommandPoolStage()
+		| bainangua::GPUIndexedVertexBufferStage(bainangua::indexedStaticVertices)
+		| bainangua::GPUIndexBufferStage()
+		| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
+		| bainangua::StandardMultiFrameLoop(10)
+		| bainangua::BasicRendering()
+		| DrawIndexedVertexGeometry();
+
 	REQUIRE(
-		wrapRenderLoopRow(
-			"IndexBuffer Pipeline Test App",
-			bainangua::PresentationLayerStage()
-			| bainangua::VTVertexPipelineStage(ShaderPath)
-			| bainangua::SimpleGraphicsCommandPoolStage()
-			| bainangua::GPUIndexedVertexBufferStage(bainangua::indexedStaticVertices)
-			| bainangua::GPUIndexBufferStage()
-			| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
-			| bainangua::StandardMultiFrameLoop(10)
-			| bainangua::BasicRendering()
-			| DrawIndexedVertexGeometry()
-		)
-		== (bainangua::bng_expected<bool>(true))
+		program.applyRow(testConfig()) == (bainangua::bng_expected<bool>(true))
 	);
 }
 
 TEST_CASE("Uniform Buffer Object", "[Rendering]")
 {
+	auto program =
+		bainangua::QuickCreateContext()
+		| bainangua::PresentationLayerStage()
+		| bainangua::MVPPipelineStage(SHADER_DIR)
+		| bainangua::SimpleGraphicsCommandPoolStage()
+		| bainangua::GPUIndexedVertexBufferStage(bainangua::indexedStaticVertices)
+		| bainangua::GPUIndexBufferStage()
+		| bainangua::CreateSimpleDescriptorPoolStage(vk::DescriptorType::eUniformBuffer, bainangua::MultiFrameCount)
+		| bainangua::CreateSimpleDescriptorSetsStage(vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex, bainangua::MultiFrameCount)
+		| bainangua::CreateAndLinkUniformBuffersStage()
+		| bainangua::FromFileTextureImageStage(TEXTURES_DIR / std::filesystem::path("default.jpg"))
+		| bainangua::Basic2DSamplerStage()
+		| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
+		| bainangua::StandardMultiFrameLoop(40)
+		| UpdateUniformBuffer()
+		| bainangua::BasicRendering()
+		| DrawMVPIndexedGeometry();
+
 	REQUIRE(
-		wrapRenderLoopRow(
-			"IndexBuffer Pipeline Test App",
-			bainangua::PresentationLayerStage()
-			| bainangua::MVPPipelineStage(SHADER_DIR)
-			| bainangua::SimpleGraphicsCommandPoolStage()
-			| bainangua::GPUIndexedVertexBufferStage(bainangua::indexedStaticVertices)
-			| bainangua::GPUIndexBufferStage()
-			| bainangua::CreateSimpleDescriptorPoolStage(vk::DescriptorType::eUniformBuffer, bainangua::MultiFrameCount)
-			| bainangua::CreateSimpleDescriptorSetsStage(vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex, bainangua::MultiFrameCount)
-			| bainangua::CreateAndLinkUniformBuffersStage()
-			| bainangua::FromFileTextureImageStage(TEXTURES_DIR / std::filesystem::path("default.jpg"))
-			| bainangua::Basic2DSamplerStage()
-			| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
-			| bainangua::StandardMultiFrameLoop(40)
-			| UpdateUniformBuffer()
-			| bainangua::BasicRendering()
-			| DrawMVPIndexedGeometry()
-		)
-		== bainangua::bng_expected<bool>(true)
+		program.applyRow(testConfig()) == bainangua::bng_expected<bool>(true)
 	);
 }
 
 TEST_CASE("Textures", "[Rendering]")
 {
+	auto program =
+		bainangua::QuickCreateContext()
+		| bainangua::PresentationLayerStage()
+		| bainangua::TexPipelineStage(SHADER_DIR)
+		| bainangua::SimpleGraphicsCommandPoolStage()
+		| bainangua::GPUIndexedVertexBufferStage(bainangua::indexedStaticTexVertices)
+		| bainangua::GPUIndexBufferStage()
+		| bainangua::CreateCombinedDescriptorPoolStage(bainangua::MultiFrameCount)
+		| bainangua::CreateCombinedDescriptorSetsStage(bainangua::MultiFrameCount)
+		| bainangua::CreateAndLinkUniformBuffersStage()
+		| bainangua::FromFileTextureImageStage(TEXTURES_DIR / std::filesystem::path("default.jpg"))
+		| bainangua::Basic2DSamplerStage()
+		| bainangua::LinkImageToDescriptorsStage()
+		| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
+		| bainangua::StandardMultiFrameLoop(40)
+		| UpdateUniformBuffer()
+		| bainangua::BasicRendering()
+		| DrawMVPIndexedGeometry();
+
 	REQUIRE(
-		wrapRenderLoopRow(
-			"Textured Shader Test App",
-			bainangua::PresentationLayerStage()
-			| bainangua::TexPipelineStage(SHADER_DIR)
-			| bainangua::SimpleGraphicsCommandPoolStage()
-			| bainangua::GPUIndexedVertexBufferStage(bainangua::indexedStaticTexVertices)
-			| bainangua::GPUIndexBufferStage()
-			| bainangua::CreateCombinedDescriptorPoolStage(bainangua::MultiFrameCount)
-			| bainangua::CreateCombinedDescriptorSetsStage(bainangua::MultiFrameCount)
-			| bainangua::CreateAndLinkUniformBuffersStage()
-			| bainangua::FromFileTextureImageStage(TEXTURES_DIR / std::filesystem::path("default.jpg"))
-			| bainangua::Basic2DSamplerStage()
-			| bainangua::LinkImageToDescriptorsStage()
-			| bainangua::PrimaryGraphicsCommandBuffersStage(bainangua::MultiFrameCount)
-			| bainangua::StandardMultiFrameLoop(40)
-			| UpdateUniformBuffer()
-			| bainangua::BasicRendering()
-			| DrawMVPIndexedGeometry()
-		)
-		== true
+		program.applyRow(testConfig()) == true
 	);
 }
 

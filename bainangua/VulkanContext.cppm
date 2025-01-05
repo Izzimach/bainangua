@@ -35,30 +35,6 @@ export module VulkanContext;
 
 namespace bainangua {
     
-/*!
- * A Vulkan context. This includes all the basic Vulkan data created upon initialization, such as
- * a vk::Instance or vk::Device. This also includes a coroutine to call at the end of each frame.
- */
-export struct VulkanContext {
-    vk::Instance vkInstance;   //!< The vulkan instance. Don't destroy this yourself!
-    GLFWwindow* glfwWindow;
-    vk::PhysicalDevice vkPhysicalDevice;
-    vk::Device vkDevice;
-    vk::SurfaceKHR vkSurface;
-
-    uint32_t graphicsQueueFamilyIndex;
-    vk::Queue graphicsQueue;
-    uint32_t presentQueueFamilyIndex;
-    vk::Queue presentQueue;
-
-    std::coroutine_handle<> endOfFrame; //!< your VulkanContextConfig::innerCode function should call this at 'end-of-frame'
-
-    VmaAllocator vmaAllocator; //!< for graphics memory allocation via vma
-
-    bool windowResized; //!< flag that the window was resized
-};
-
-
 export
 struct VulkanContextConfig {
     std::string AppName{ "Vulkan App" };
@@ -99,6 +75,21 @@ ReturnObject doNothingEndFrame()
     }
 }
 
+export
+struct EmptyEndFrameCallback {
+    using row_tag = RowType::RowWrapperTag;
+
+    template <typename WrappedReturnType>
+    using return_type_transformer = WrappedReturnType;
+
+    template <typename RowFunction, typename Row>
+    constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+        std::coroutine_handle<> frameCallback(doNothingEndFrame());
+        auto rWithCallback = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("endOfFrameCallback"), frameCallback));
+        return f.applyRow(rWithCallback);
+    }
+};
+
 VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT /*messageSeverity*/,
     VkDebugUtilsMessageTypeFlagsEXT /*messageType*/,
@@ -110,26 +101,15 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     return VK_FALSE;
 }
 
-void framebufferResizeCallback(GLFWwindow* window, int /*width*/, int /*height*/) {
+/*void framebufferResizeCallback(GLFWwindow* window, int, int) {
     auto s = reinterpret_cast<bainangua::VulkanContext*>(glfwGetWindowUserPointer(window));
     if (s) s->windowResized = true;
-}
+}*/
 
-
+/*
 template <typename Row, typename Result>
 Result invokeInnerCode(Row r, std::function<typename Result(VulkanContext&)> innerCode)
 {
-    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>, "Row must have field named 'instance'");
-    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("glfwWindow"), GLFWwindow*>, "Row must have field named 'glfwWindow'");
-    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("physicalDevice"), vk::PhysicalDevice>, "Row must have field named 'physicalDevice'");
-    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("device"), vk::Device>, "Row must have field named 'device'");
-    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("surface"), vk::SurfaceKHR>, "Row must have field named 'surface'");
-    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("graphicsQueueFamilyIndex"), uint32_t>, "Row must have field named 'graphicsQueueFamilyIndex'");
-    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("graphicsQueue"), vk::Queue>, "Row must have field named 'graphicsQueue'");
-    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("presentQueueFamilyIndex"), uint32_t>, "Row must have field named 'presentQueueFamilyIndex'");
-    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("presentQueue"), vk::Queue>, "Row must have field named 'presentQueue'");
-    static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("vmaAllocator"), VmaAllocator>, "Row must have field named 'vmaAllocator'");
-
     const VulkanContextConfig config  = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
     vk::Instance instance             = boost::hana::at_key(r, BOOST_HANA_STRING("instance"));
     GLFWwindow* window                = boost::hana::at_key(r, BOOST_HANA_STRING("glfwWindow"));
@@ -185,7 +165,9 @@ struct InvokeInnerCode {
     template<typename Row>
     constexpr Result applyRow(Row r) { return invokeInnerCode(r, innercode_); }
 };
+*/
 
+export
 struct StandardVMAAllocator {
     using row_tag = RowType::RowWrapperTag;
 
@@ -193,11 +175,10 @@ struct StandardVMAAllocator {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
+    requires   RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>
+            && RowType::has_named_field<Row, BOOST_HANA_STRING("physicalDevice"), vk::PhysicalDevice>
+            && RowType::has_named_field<Row, BOOST_HANA_STRING("device"), vk::Device>
     constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-        static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>, "Row must have field named 'instance'");
-        static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("physicalDevice"), vk::PhysicalDevice>, "Row must have field named 'physicalDevice'");
-        static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("device"), vk::Device>, "Row must have field named 'device'");
-
         vk::Instance instance = boost::hana::at_key(r, BOOST_HANA_STRING("instance"));
         vk::PhysicalDevice physicalDevice = boost::hana::at_key(r, BOOST_HANA_STRING("physicalDevice"));
         vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
@@ -236,6 +217,7 @@ struct StandardVMAAllocator {
     }
 };
 
+export
 struct StandardDevice {
     using row_tag = RowType::RowWrapperTag;
 
@@ -325,6 +307,7 @@ struct StandardDevice {
     }
 };
 
+export
 struct CreateGLFWWindowAndSurface {
     using row_tag = RowType::RowWrapperTag;
 
@@ -332,10 +315,9 @@ struct CreateGLFWWindowAndSurface {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
+    requires    RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig&>
+             && RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>
     constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-        static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig>, "Row must have field named 'config'");
-        static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>, "Row must have field named 'instance'");
-
         const VulkanContextConfig& config = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
         vk::Instance instance = boost::hana::at_key(r, BOOST_HANA_STRING("instance"));
 
@@ -366,6 +348,7 @@ struct CreateGLFWWindowAndSurface {
     }
 };
 
+export
 struct FirstSwapchainPhysicalDevice {
     using row_tag = RowType::RowWrapperTag;
 
@@ -373,8 +356,8 @@ struct FirstSwapchainPhysicalDevice {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
+    requires     RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>
     constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-        static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>, "Row must have field named 'instance'");
         vk::Instance instance = boost::hana::at_key(r, BOOST_HANA_STRING("instance"));
 
         // enumerate the physicalDevices
@@ -415,6 +398,7 @@ struct FirstSwapchainPhysicalDevice {
     }
 };
 
+export
 struct StandardVulkanInstance {
     using row_tag = RowType::RowWrapperTag;
 
@@ -422,6 +406,7 @@ struct StandardVulkanInstance {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
+    requires     RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig&>
     constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
         const VulkanContextConfig& config = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
 
@@ -450,7 +435,7 @@ struct StandardVulkanInstance {
         std::string validationString("VK_LAYER_KHRONOS_validation");
         auto validates = std::ranges::find_if(vulkanLayers, [&](vk::LayerProperties p) { std::string s = p.layerName; return s == validationString; });
         if (validates == vulkanLayers.end()) {
-            return tl::make_unexpected("Vulkan layers do not contain VK_LAYER_KHRONOS_validation");
+            return bng_unexpected("Vulkan layers do not contain VK_LAYER_KHRONOS_validation");
         }
 
         // check validation layers
@@ -497,6 +482,7 @@ struct StandardVulkanInstance {
     }
 };
 
+export
 struct GLFWOuterWrapper {
     using row_tag = RowType::RowWrapperTag;
 
@@ -504,6 +490,7 @@ struct GLFWOuterWrapper {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
+    requires     RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig&>
     constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
         const VulkanContextConfig &config = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
 
@@ -545,48 +532,14 @@ struct GLFWOuterWrapper {
 };
 
 export
-template <typename Result>
-auto createVulkanContext(const VulkanContextConfig& config, std::function<typename Result(VulkanContext &)> innerCode) -> typename Result
-{
-    auto configRow = boost::hana::make_map(boost::hana::make_pair(BOOST_HANA_STRING("config"), config));
-
-    auto vulkanStages =
-        GLFWOuterWrapper()
+auto QuickCreateContext() {
+    return GLFWOuterWrapper()
         | StandardVulkanInstance()
         | FirstSwapchainPhysicalDevice()
         | CreateGLFWWindowAndSurface()
-        | StandardDevice() 
-        | StandardVMAAllocator() 
-        | InvokeInnerCode<Result>(innerCode);
-
-    return vulkanStages.applyRow(configRow);
-}
-
-export
-struct QuickCreateContext {
-    QuickCreateContext(VulkanContextConfig config) : config_(config) {}
-
-    VulkanContextConfig config_;
-
-    using row_tag = RowType::RowWrapperTag;
-
-    template <typename WrappedReturnType>
-    using return_type_transformer = WrappedReturnType;
-
-    template <typename RowFunction, typename Row>
-    constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-        auto vulkanStages =
-            GLFWOuterWrapper()
-            | StandardVulkanInstance()
-            | FirstSwapchainPhysicalDevice()
-            | CreateGLFWWindowAndSurface()
-            | StandardDevice()
-            | StandardVMAAllocator()
-            | f;
-
-        auto rWithConfig = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("config"), config_));
-        return vulkanStages.applyRow(rWithConfig);
-    }
+        | StandardDevice()
+        | StandardVMAAllocator()
+        | EmptyEndFrameCallback();
 };
 
 }

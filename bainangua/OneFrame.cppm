@@ -3,6 +3,7 @@ module;
 #include "bainangua.hpp"
 #include "RowType.hpp"
 
+#include <coroutine>
 #include <expected.hpp>
 #include <functional>
 
@@ -15,20 +16,28 @@ import Pipeline;
 namespace bainangua {
 
 export
-tl::expected<std::shared_ptr<PresentationLayer>,vk::Result> drawOneFrame(VulkanContext& s, std::shared_ptr<PresentationLayer> presenterptr, const PipelineBundle& pipeline, vk::CommandBuffer buffer, size_t multiFrameIndex, std::function<void(vk::CommandBuffer, vk::Framebuffer)> drawCommands)
+tl::expected<std::shared_ptr<PresentationLayer>,vk::Result> drawOneFrame(
+	vk::Device device,
+	vk::Queue graphicsQueue,
+	vk::Queue presentQueue,
+	std::shared_ptr<PresentationLayer> presenterptr, 
+	const PipelineBundle& pipeline, 
+	vk::CommandBuffer buffer, 
+	size_t multiFrameIndex, 
+	std::function<void(vk::CommandBuffer, vk::Framebuffer)> drawCommands)
 {
 	uint32_t retryLimit = 100;
 
 	// This is called from two different places.
 	auto rebuildPresenter = [&]() {
-			presenterptr = presenterptr->rebuildSwapChain(s);
+			presenterptr = presenterptr->rebuildSwapChain();
 			presenterptr->connectRenderPass(pipeline.renderPass);
 		};
 
 	while (retryLimit > 0) {
 		retryLimit--;
 
-		vk::Result waitResult = s.vkDevice.waitForFences(presenterptr->inFlightFences_[multiFrameIndex], vk::True, UINT64_MAX);
+		vk::Result waitResult = device.waitForFences(presenterptr->inFlightFences_[multiFrameIndex], vk::True, UINT64_MAX);
 		if (waitResult != vk::Result::eSuccess)
 		{
 			return tl::make_unexpected(waitResult);
@@ -36,9 +45,9 @@ tl::expected<std::shared_ptr<PresentationLayer>,vk::Result> drawOneFrame(VulkanC
 
 		// we don't use the "enhanced" version of acquireNextImageKHR since it throws on an OutOfDateKHR result
 		uint32_t imageIndex = 0;
-		vk::Result acquireResult = s.vkDevice.acquireNextImageKHR(presenterptr->swapChain_, UINT64_MAX, presenterptr->imageAvailableSemaphores_[multiFrameIndex], VK_NULL_HANDLE, &imageIndex);
-		if (acquireResult == vk::Result::eErrorOutOfDateKHR || acquireResult == vk::Result::eSuboptimalKHR || s.windowResized) {
-			s.windowResized = false;
+		vk::Result acquireResult = device.acquireNextImageKHR(presenterptr->swapChain_, UINT64_MAX, presenterptr->imageAvailableSemaphores_[multiFrameIndex], VK_NULL_HANDLE, &imageIndex);
+		if (acquireResult == vk::Result::eErrorOutOfDateKHR || acquireResult == vk::Result::eSuboptimalKHR /* || s.windowResized*/) {
+			//s.windowResized = false;
 			rebuildPresenter();
 			continue; // retry and rebuild swapchain
 		}
@@ -46,14 +55,14 @@ tl::expected<std::shared_ptr<PresentationLayer>,vk::Result> drawOneFrame(VulkanC
 			return tl::make_unexpected(acquireResult);
 		}
 
-		s.vkDevice.resetFences(presenterptr->inFlightFences_[multiFrameIndex]);
+		device.resetFences(presenterptr->inFlightFences_[multiFrameIndex]);
 
 		buffer.reset();
 		drawCommands(buffer, presenterptr->swapChainFramebuffers_[imageIndex]);
 
 		vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 		vk::SubmitInfo submitInfo(presenterptr->imageAvailableSemaphores_[multiFrameIndex], waitStages, buffer, presenterptr->renderFinishedSemaphores_[multiFrameIndex]);
-		s.graphicsQueue.submit(submitInfo, presenterptr->inFlightFences_[multiFrameIndex]);
+		graphicsQueue.submit(submitInfo, presenterptr->inFlightFences_[multiFrameIndex]);
 
 		vk::PresentInfoKHR presentInfo(
 			presenterptr->renderFinishedSemaphores_[multiFrameIndex],
@@ -61,7 +70,7 @@ tl::expected<std::shared_ptr<PresentationLayer>,vk::Result> drawOneFrame(VulkanC
 			imageIndex,
 			nullptr
 		);
-		vk::Result presentResult = s.presentQueue.presentKHR(&presentInfo);
+		vk::Result presentResult = presentQueue.presentKHR(&presentInfo);
 		if (presentResult == vk::Result::eErrorOutOfDateKHR) {
 			rebuildPresenter();
 			continue; // retry the wait/acquire
@@ -94,19 +103,25 @@ struct StandardMultiFrameLoop {
 
 	template <typename RowFunction, typename Row>
 	constexpr bng_expected<bool> wrapRowFunction(RowFunction f, Row r) {
-		bainangua::VulkanContext& s = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+		vk::Queue graphicsQueue = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsQueue"));
+		vk::Queue presentQueue = boost::hana::at_key(r, BOOST_HANA_STRING("presentQueue"));
+		GLFWwindow* glfwWindow = boost::hana::at_key(r, BOOST_HANA_STRING("glfwWindow"));
 		std::shared_ptr<bainangua::PresentationLayer> presenterptr = boost::hana::at_key(r, BOOST_HANA_STRING("presenterptr"));
 		bainangua::PipelineBundle pipeline = boost::hana::at_key(r, BOOST_HANA_STRING("pipelineBundle"));
+
+		std::coroutine_handle<> endOfFrame = boost::hana::at_key(r, BOOST_HANA_STRING("endOfFrameCallback"));
+
 
 		std::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("commandBuffers"));
 
 
 		size_t multiFrameIndex = 0;
 
-		while (!glfwWindowShouldClose(s.glfwWindow)) {
+		while (!glfwWindowShouldClose(glfwWindow)) {
 
 			tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result> result =
-				bainangua::drawOneFrame(s, presenterptr, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandBuffer, vk::Framebuffer frameBuffer) {
+				bainangua::drawOneFrame(device, graphicsQueue, presentQueue, presenterptr, pipeline, commandBuffers[multiFrameIndex], multiFrameIndex, [&](vk::CommandBuffer commandBuffer, vk::Framebuffer frameBuffer) {
 					auto newFields = boost::hana::make_map(
 						boost::hana::make_pair(BOOST_HANA_STRING("primaryCommandBuffer"), commandBuffer),
 						boost::hana::make_pair(BOOST_HANA_STRING("targetFrameBuffer"), frameBuffer),
@@ -123,7 +138,7 @@ struct StandardMultiFrameLoop {
 					presenterptr = newPresenter;
 
 					glfwPollEvents();
-					s.endOfFrame();
+					endOfFrame();
 					multiFrameIndex = (multiFrameIndex + 1) % bainangua::MultiFrameCount;
 
 					return tl::expected<std::shared_ptr<bainangua::PresentationLayer>, vk::Result>(newPresenter);
@@ -134,7 +149,7 @@ struct StandardMultiFrameLoop {
 			}
 		}
 
-		s.vkDevice.waitIdle();
+		device.waitIdle();
 
 		return true;
 	}

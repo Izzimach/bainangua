@@ -153,14 +153,23 @@ struct CreateQueueFunnels {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
-    constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-        VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
-
-		std::shared_ptr<CommandQueueFunnel> graphicsFunnel = std::make_shared<CommandQueueFunnel>(context.vkDevice, context.graphicsQueue);
+	requires   RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>
+	        && RowType::has_named_field<Row, BOOST_HANA_STRING("physicalDevice"), vk::PhysicalDevice>
+			&& RowType::has_named_field<Row, BOOST_HANA_STRING("device"), vk::Device>
+			&& RowType::has_named_field<Row, BOOST_HANA_STRING("graphicsQueue"), vk::Queue>
+			&& RowType::has_named_field<Row, BOOST_HANA_STRING("presentQueue"), vk::Queue>
+	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+		vk::Instance instance = boost::hana::at_key(r, BOOST_HANA_STRING("instance"));
+		vk::PhysicalDevice physicalDevice = boost::hana::at_key(r, BOOST_HANA_STRING("physicalDevice"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+		vk::Queue graphicsQueue = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsQueue"));
+		vk::Queue presentQueue = boost::hana::at_key(r, BOOST_HANA_STRING("presentQueue"));
+		
+		std::shared_ptr<CommandQueueFunnel> graphicsFunnel = std::make_shared<CommandQueueFunnel>(device, graphicsQueue);
 		std::shared_ptr<CommandQueueFunnel> presentFunnel =
-			context.graphicsQueue == context.presentQueue ?
+			graphicsQueue == presentQueue ?
 			graphicsFunnel :
-			std::make_shared<CommandQueueFunnel>(context.vkDevice, context.presentQueue);
+			std::make_shared<CommandQueueFunnel>(device, presentQueue);
 
 		auto rWithFunnels = boost::hana::insert(boost::hana::insert(r,
 			boost::hana::make_pair(BOOST_HANA_STRING("graphicsFunnel"), graphicsFunnel)),

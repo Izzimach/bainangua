@@ -22,7 +22,6 @@
 #include <coro/coro.hpp>
 
 #include "nangua_tests.hpp" // this has to be after the coro include, or else wonky double-include occurs...
-#include "resourceloader_tests.hpp"
 
 import VulkanContext;
 import ResourceLoader;
@@ -186,77 +185,120 @@ auto testLoaderStorage = bainangua::createLoaderStorage(testLoaderLookup);
 
 using TestResourceLoader = bainangua::ResourceLoader<decltype(testLoaderLookup), decltype(testLoaderStorage)>;
 
-auto testWrapper = std::function(wrapResourceLoader<decltype(testLoaderLookup), decltype(testLoaderStorage)>);
-	
+struct BasicLoadTest {
+	using row_tag = RowType::RowFunctionTag;
+	using return_type = bainangua::bng_expected<std::string>;
+
+	template <typename Row>
+//		requires   RowType::has_named_field<Row, BOOST_HANA_STRING("resourceLoader"), std::shared_ptr<TestResourceLoader>>
+	constexpr bainangua::bng_expected<std::string> applyRow(Row r) {
+		/*std::shared_ptr<TestResourceLoader>*/ auto loader = boost::hana::at_key(r, BOOST_HANA_STRING("resourceLoader"));
+
+		// load a bunch of stuff
+		coro::task<bainangua::bng_expected<int>> loading1 = loader->loadResource(IdentityKey<int>(3));
+		bainangua::bng_expected<int> result1 = coro::sync_wait(loading1);
+
+		coro::task<bainangua::bng_expected<DelayResult>> loading2 = loader->loadResource(DelayKey(0.5f));
+		bainangua::bng_expected<DelayResult> result2 = coro::sync_wait(loading2);
+
+		coro::task<bainangua::bng_expected<ChainLoadResult>> loading3 = loader->loadResource(ChainLoadKey(5));
+		bainangua::bng_expected<ChainLoadResult> result3 = coro::sync_wait(loading3);
+
+		// this should do cleanup
+		coro::sync_wait(loader->unloadResource(IdentityKey<int>(3)));
+		coro::sync_wait(loader->unloadResource(DelayKey(0.5f)));
+		coro::sync_wait(loader->unloadResource(ChainLoadKey(5)));
+
+		return std::format("result 1={}", result1.value());
+	}
+};
+
+struct BadUnloadTest {
+	using row_tag = RowType::RowFunctionTag;
+	using return_type = bainangua::bng_expected<std::string>;
+
+	template <typename Row>
+	//	requires   RowType::has_named_field<Row, BOOST_HANA_STRING("resourceLoader"), std::shared_ptr<TestResourceLoader>>
+	constexpr bainangua::bng_expected<std::string> applyRow(Row r) {
+		/*std::shared_ptr<TestResourceLoader>*/ auto loader = boost::hana::at_key(r, BOOST_HANA_STRING("resourceLoader"));
+
+		BadUnloadKey key{ 3 };
+		// load a bunch of stuff
+		coro::task<bainangua::bng_expected<BadUnloadResult>> loading1 = loader->loadResource(key);
+		auto result1 = coro::sync_wait(loading1);
+
+		// this should do cleanup of the BadUnload resource but not the dependency
+		coro::sync_wait(loader->unloadResource(key));
+
+		size_t usedStorageCount = loader->measureLoad();
+		std::cout << "bad unload usedStorageCount=" << usedStorageCount << "\n";
+
+		return std::format("storage count={}", usedStorageCount);
+	}
+};
+
 TEST_CASE("ResourceLoaderBasicLoadUnload", "[ResourceLoader][Basic]")
 {
-	auto initResult = testWrapper("ResourceLoaderInit", testLoaderLookup, [](std::shared_ptr<TestResourceLoader> loader) {
-			// load a bunch of stuff
-			coro::task<bainangua::bng_expected<int>> loading1 = loader->loadResource(IdentityKey<int>(3));
-			bainangua::bng_expected<int> result1 = coro::sync_wait(loading1);
+	auto basic_load_test =
+		bainangua::QuickCreateContext()
+		| bainangua::ResourceLoaderStage(testLoaderLookup, testLoaderStorage)
+		| BasicLoadTest();
 
-			coro::task<bainangua::bng_expected<DelayResult>> loading2 = loader->loadResource(DelayKey(0.5f));
-			bainangua::bng_expected<DelayResult> result2 = coro::sync_wait(loading2);
 
-			coro::task<bainangua::bng_expected<ChainLoadResult>> loading3 = loader->loadResource(ChainLoadKey(5));
-			bainangua::bng_expected<ChainLoadResult> result3 = coro::sync_wait(loading3);
+	REQUIRE(basic_load_test.applyRow(testConfig()) == "result 1=3");
 
-			// this should do cleanup
-			coro::sync_wait(loader->unloadResource(IdentityKey<int>(3)));
-			coro::sync_wait(loader->unloadResource(DelayKey(0.5f)));
-			coro::sync_wait(loader->unloadResource(ChainLoadKey(5)));
+	auto bad_unload_test = 
+		bainangua::QuickCreateContext()
+		| bainangua::ResourceLoaderStage(testLoaderLookup, testLoaderStorage)
+		| BadUnloadTest();
 
-			return std::format("result 1={}", result1.value());
-		}
-	);
-	REQUIRE(initResult == "result 1=3");
-
-	auto badUnloadResult = testWrapper("ResourceLoaderBadUnload", testLoaderLookup, [](std::shared_ptr<TestResourceLoader> loader) {
-			BadUnloadKey key{ 3 };
-			// load a bunch of stuff
-			coro::task<bainangua::bng_expected<BadUnloadResult>> loading1 = loader->loadResource(key);
-			auto result1 = coro::sync_wait(loading1);
-
-			// this should do cleanup of the BadUnload resource but not the dependency
-			coro::sync_wait(loader->unloadResource(key));
-
-			size_t usedStorageCount = loader->measureLoad();
-			std::cout << "bad unload usedStorageCount=" << usedStorageCount << "\n";
-
-			return std::format("storage count={}", usedStorageCount);
-		}
-	);
-	REQUIRE(badUnloadResult.value() == "storage count=1");
+	REQUIRE(bad_unload_test.applyRow(testConfig()) == "storage count=1");
 }
+
+
+struct VariableLoadTest {
+	VariableLoadTest(int k) : variableKey_(k) {}
+
+	int variableKey_;
+
+	using row_tag = RowType::RowFunctionTag;
+	using return_type = bainangua::bng_expected<std::string>;
+
+	template <typename Row>
+//		requires   RowType::has_named_field<Row, BOOST_HANA_STRING("resourceLoader"), std::shared_ptr<TestResourceLoader>>
+	constexpr bainangua::bng_expected<std::string> applyRow(Row r) {
+		/*std::shared_ptr<TestResourceLoader>*/ auto loader = boost::hana::at_key(r, BOOST_HANA_STRING("resourceLoader"));
+
+		// variable load
+		VariableLoadKey key{ variableKey_ };
+		coro::task<bainangua::bng_expected<VariableLoadResult>> loading1 = loader->loadResource(key);
+		bainangua::bng_expected<VariableLoadResult> result1 = coro::sync_wait(loading1);
+
+		// this should unload everything that was loaded
+		coro::sync_wait(loader->unloadResource(key));
+
+		// is there anything still loaded?
+		size_t usedStorageCount = loader->measureLoad();
+
+		if (result1.has_value()) {
+			return std::format("variable load success, load={}", usedStorageCount);
+		}
+		else {
+			return std::string("variable load failed");
+		}
+	}
+};
 
 TEST_CASE("ResourceLoaderVariableLoad", "[ResourceLoader][Generator]")
 {
-	auto variableLoad = GENERATE(take(5, random(0, 100)));
+	auto variableKey = GENERATE(take(5, random(0, 100)));
 
-	REQUIRE(
-		testWrapper("ResourceLoaderInit", testLoaderLookup, [=](std::shared_ptr<TestResourceLoader> loader) {
-			// variable load
-			VariableLoadKey key{ variableLoad };
-			coro::task<bainangua::bng_expected<VariableLoadResult>> loading1 = loader->loadResource(key);
-			bainangua::bng_expected<VariableLoadResult> result1 = coro::sync_wait(loading1);
+	auto variable_load_test = 
+		bainangua::QuickCreateContext()
+		| bainangua::ResourceLoaderStage(testLoaderLookup, testLoaderStorage)
+		| VariableLoadTest(variableKey);
 
-			// this should unload everything that was loaded
-			coro::sync_wait(loader->unloadResource(key));
-
-			// is there anything still loaded?
-			size_t usedStorageCount = loader->measureLoad();
-
-			if (result1.has_value()) {
-				return std::format("variable load success, load={}", usedStorageCount);
-			}
-			else {
-				return std::string("variable load failed");
-			}
-		}
-		)
-		==
-		bainangua::bng_expected<std::string>("variable load success, load=0")
-	);
+	REQUIRE(variable_load_test.applyRow(testConfig())	== "variable load success, load=0");
 }
 
 }

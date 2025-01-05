@@ -105,7 +105,7 @@ export auto destroyUniformBuffer(VmaAllocator allocator, UniformBufferBundle UBO
 	vmaDestroyBuffer(allocator, UBOBundle.ubo, UBOBundle.allocation);
 }
 
-export auto linkUBOAndDescriptors(const VulkanContext& s, std::vector<UniformBufferBundle> ubos, std::vector<vk::DescriptorSet> descriptors) -> bng_expected<void> {
+export auto linkUBOAndDescriptors(vk::Device device, std::vector<UniformBufferBundle> ubos, std::vector<vk::DescriptorSet> descriptors) -> bng_expected<void> {
 	if (ubos.size() != descriptors.size()) {
 		return tl::make_unexpected("configureUBODescriptors: ubos count does not match descriptor count");
 	}
@@ -113,7 +113,7 @@ export auto linkUBOAndDescriptors(const VulkanContext& s, std::vector<UniformBuf
 	for (size_t ix = 0; ix < ubos.size(); ix++) {
 		vk::DescriptorBufferInfo bufferInfo(ubos[ix].ubo, 0, sizeof(BasicUBO));
 		vk::WriteDescriptorSet descriptorWrite(descriptors[ix], 0, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &bufferInfo, nullptr);
-		s.vkDevice.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+		device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
 	}
 
 	return tl::expected<void, bng_errorobject>();
@@ -127,25 +127,27 @@ export struct CreateAndLinkUniformBuffersStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+		VmaAllocator vmaAllocator = boost::hana::at_key(r, BOOST_HANA_STRING("vmaAllocator"));
+
 		std::vector<vk::DescriptorSet> descriptorSets = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorSets"));
 
-		auto createResult = createUniformBuffers(context.vmaAllocator);
+		auto createResult = createUniformBuffers(vmaAllocator);
 		if (!createResult) {
 			return tl::make_unexpected(createResult.error());
 		}
 
 		std::vector<UniformBufferBundle> ubos = createResult.value();
-		auto linkResult = linkUBOAndDescriptors(context, ubos, descriptorSets);
+		auto linkResult = linkUBOAndDescriptors(device, ubos, descriptorSets);
 		if (!linkResult) {
-			destroyUniformBuffers(context.vmaAllocator, ubos);
+			destroyUniformBuffers(vmaAllocator, ubos);
 			return tl::make_unexpected(linkResult.error());
 		}
 
 		auto rWithUBOs = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("uniformBuffers"), ubos));
 		auto result = f.applyRow(rWithUBOs);
 
-		destroyUniformBuffers(context.vmaAllocator, ubos);
+		destroyUniformBuffers(vmaAllocator, ubos);
 
 		return result;
 

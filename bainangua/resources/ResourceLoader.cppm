@@ -125,8 +125,9 @@ template <typename LoaderDirectory, typename LoaderStorage>
 class ResourceLoader
 {
 public:
-    ResourceLoader(VulkanContext& context, LoaderDirectory loaders)
-        : context_(context),
+    template <typename Row>
+    ResourceLoader(Row r, LoaderDirectory loaders)
+        : device_(boost::hana::at_key(r, BOOST_HANA_STRING("device"))),
         loaders_(loaders),
         tp_(std::make_shared<coro::thread_pool>(coro::thread_pool::options{.thread_count = 4})),
         autoTasks_(tp_)
@@ -160,7 +161,7 @@ public:
         return totalSize;
     }
 
-    VulkanContext context_;
+    vk::Device device_;
     LoaderDirectory loaders_;
     LoaderStorage storage_;
     
@@ -321,9 +322,9 @@ auto createLoaderStorage(LoaderDirectoryType loaderDirectory) {
 }
 
 export
-template <typename LoaderDirectory>
+template <typename LoaderDirectory, typename LoaderStorage>
 struct ResourceLoaderStage {
-    ResourceLoaderStage(LoaderDirectory directory) : directory_(directory) {}
+    ResourceLoaderStage(LoaderDirectory d, LoaderStorage) : directory_(d) {}
 
     LoaderDirectory directory_;
 
@@ -334,13 +335,9 @@ struct ResourceLoaderStage {
 
     template <typename RowFunction, typename Row>
     constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-        VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+        using LoaderType = ResourceLoader<LoaderDirectory, LoaderStorage>;
 
-        auto loaderStorage = createLoaderStorage(directory_);
-
-        using LoaderType = ResourceLoader<LoaderDirectory, decltype(loaderStorage)>;
-
-        std::shared_ptr<LoaderType> loaderptr(std::make_shared<LoaderType>(context, directory_));
+        std::shared_ptr<LoaderType> loaderptr(std::make_shared<LoaderType>(r, directory_));
 
         auto rWithResourceLoader = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("resourceLoader"), loaderptr));
         auto result = f.applyRow(rWithResourceLoader);

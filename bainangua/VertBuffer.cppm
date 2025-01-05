@@ -116,8 +116,8 @@ auto createVertexBuffer(VmaAllocator allocator, const std::vector<V>& vertexData
 }
 
 export
-auto copyBuffer(const VulkanContext& s, vk::CommandPool pool, VkBuffer source, VkBuffer dest, size_t dataSize) -> vk::Result {
-	return submitCommand(s, pool, [&](vk::CommandBuffer buffer) {
+auto copyBuffer(vk::Device device, vk::Queue graphicsQueue, vk::CommandPool pool, VkBuffer source, VkBuffer dest, size_t dataSize) -> vk::Result {
+	return submitCommand(device, graphicsQueue, pool, [&](vk::CommandBuffer buffer) {
 		vk::BufferCopy copyRegion(0, 0, dataSize);
 		buffer.copyBuffer(source, dest, 1, &copyRegion);
 
@@ -127,7 +127,7 @@ auto copyBuffer(const VulkanContext& s, vk::CommandPool pool, VkBuffer source, V
 
 export
 template <typename V>
-auto createGPUVertexBuffer(VmaAllocator allocator, const VulkanContext& s, vk::CommandPool pool, const std::vector<V>& vertexData) -> tl::expected<std::tuple<vk::Buffer, VmaAllocation>, bainangua::bng_errorobject> {
+auto createGPUVertexBuffer(vk::Device device, vk::Queue graphicsQueue, VmaAllocator allocator, vk::CommandPool pool, const std::vector<V>& vertexData) -> tl::expected<std::tuple<vk::Buffer, VmaAllocation>, bainangua::bng_errorobject> {
 	// create two buffers, one on GPU and one host-visible
 
 	auto hostVisibleBuffer = createVertexBuffer(allocator, vertexData);
@@ -163,7 +163,7 @@ auto createGPUVertexBuffer(VmaAllocator allocator, const VulkanContext& s, vk::C
 		return tl::make_unexpected("createGPUVertexBuffer: vmaCreateBuffer failed");
 	}
 
-	vk::Result copyResult = copyBuffer(s, pool, hostBuffer, GPUbuffer, dataSize);
+	vk::Result copyResult = copyBuffer(device, graphicsQueue, pool, hostBuffer, GPUbuffer, dataSize);
 	if (copyResult != vk::Result::eSuccess) {
 		vmaDestroyBuffer(allocator, hostBuffer, hostAllocation);
 		vmaDestroyBuffer(allocator, GPUbuffer, GPUallocation);
@@ -177,7 +177,7 @@ auto createGPUVertexBuffer(VmaAllocator allocator, const VulkanContext& s, vk::C
 
 export
 template <typename Index>
-auto createGPUIndexBuffer(VmaAllocator allocator, const VulkanContext& s, vk::CommandPool pool, const std::vector<Index> &indices) -> tl::expected<std::tuple<vk::Buffer, VmaAllocation>, bainangua::bng_errorobject> {
+auto createGPUIndexBuffer(vk::Device device, vk::Queue graphicsQueue, VmaAllocator allocator, vk::CommandPool pool, const std::vector<Index> &indices) -> tl::expected<std::tuple<vk::Buffer, VmaAllocation>, bainangua::bng_errorobject> {
 	VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
 	VkBufferCreateInfo bufferCreateInfo{
@@ -236,7 +236,7 @@ auto createGPUIndexBuffer(VmaAllocator allocator, const VulkanContext& s, vk::Co
 
 	memcpy(StagingInfo.pMappedData, indices.data(), (size_t)bufferSize);
 
-	copyBuffer(s, pool, stagingBuffer, GPUbuffer, bufferSize);
+	copyBuffer(device, graphicsQueue, pool, stagingBuffer, GPUbuffer, bufferSize);
 
 	vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
 
@@ -261,10 +261,12 @@ export struct GPUVertexBufferStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		VmaAllocator vmaAllocator = boost::hana::at_key(r, BOOST_HANA_STRING("vmaAllocator"));
 		vk::CommandPool commandPool = boost::hana::at_key(r, BOOST_HANA_STRING("commandPool"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+		vk::Queue graphicsQueue = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsQueue"));
 
-		auto vertexResult = bainangua::createGPUVertexBuffer(context.vmaAllocator, context, commandPool, bainangua::staticVertices);
+		auto vertexResult = bainangua::createGPUVertexBuffer(device, graphicsQueue, vmaAllocator, commandPool, bainangua::staticVertices);
 		if (!vertexResult.has_value()) {
 			return tl::make_unexpected<bng_errorobject>("GPUVertexBufferStage: could not create GPU vertex buffer");
 		}
@@ -273,7 +275,7 @@ export struct GPUVertexBufferStage {
 		auto rWithVertexBuffer = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("vertexBuffer"), vertexValue));
 		auto result = f.applyRow(rWithVertexBuffer);
 
-		bainangua::destroyVertexBuffer(context.vmaAllocator, vertexValue);
+		bainangua::destroyVertexBuffer(vmaAllocator, vertexValue);
 
 		return result;
 	}
@@ -293,10 +295,12 @@ struct GPUIndexedVertexBufferStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+		vk::Queue graphicsQueue = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsQueue"));
+		VmaAllocator vmaAllocator = boost::hana::at_key(r, BOOST_HANA_STRING("vmaAllocator"));
 		vk::CommandPool commandPool = boost::hana::at_key(r, BOOST_HANA_STRING("commandPool"));
 
-		auto vertexResult = bainangua::createGPUVertexBuffer(context.vmaAllocator, context, commandPool, vertices_);
+		auto vertexResult = bainangua::createGPUVertexBuffer(device, graphicsQueue, vmaAllocator, commandPool, vertices_);
 		if (!vertexResult.has_value()) {
 			return tl::make_unexpected<bng_errorobject>("GPUVertexBufferStage: could not create GPU vertex buffer");
 		}
@@ -305,7 +309,7 @@ struct GPUIndexedVertexBufferStage {
 		auto rWithVertexBuffer = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("indexedVertexBuffer"), vertexValue));
 		auto result = f.applyRow(rWithVertexBuffer);
 
-		bainangua::destroyVertexBuffer(context.vmaAllocator, vertexValue);
+		bainangua::destroyVertexBuffer(vmaAllocator, vertexValue);
 
 		return result;
 	}
@@ -319,10 +323,12 @@ export struct GPUIndexBufferStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+		vk::Queue graphicsQueue = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsQueue"));
+		VmaAllocator vmaAllocator = boost::hana::at_key(r, BOOST_HANA_STRING("vmaAllocator"));
 		vk::CommandPool commandPool = boost::hana::at_key(r, BOOST_HANA_STRING("commandPool"));
 
-		auto indexResult = bainangua::createGPUIndexBuffer(context.vmaAllocator, context, commandPool, bainangua::staticIndices);
+		auto indexResult = bainangua::createGPUIndexBuffer(device, graphicsQueue, vmaAllocator, commandPool, bainangua::staticIndices);
 		if (!indexResult.has_value()) {
 			return tl::make_unexpected<bng_errorobject>("GPUIndexBufferStage: could not create GPU index buffer");
 		}
@@ -331,7 +337,7 @@ export struct GPUIndexBufferStage {
 		auto rWithIndexBuffer = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("indexBuffer"), indexValue));
 		auto result = f.applyRow(rWithIndexBuffer);
 
-		bainangua::destroyVertexBuffer(context.vmaAllocator, indexValue);
+		bainangua::destroyVertexBuffer(vmaAllocator, indexValue);
 
 		return result;
 	}

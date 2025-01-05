@@ -23,6 +23,7 @@ namespace RowType {
 
 	template <typename Row, boost::hana::string FieldName, typename FieldType>
 	concept has_named_field = requires (Row s) {
+//		{ boost::hana::find(s, FieldName).value() } -> std::convertible_to<FieldType>;
 		{ boost::hana::at_key(s, FieldName) } -> std::convertible_to<FieldType>;
 	};
 

@@ -13,26 +13,26 @@ import PresentationLayer;
 
 namespace bainangua {
 
-export auto createDescriptorPool(const VulkanContext& s) -> bng_expected<vk::DescriptorPool> {
+export auto createDescriptorPool(vk::Device device) -> bng_expected<vk::DescriptorPool> {
 	vk::DescriptorPoolSize poolSize(vk::DescriptorType::eUniformBuffer, static_cast<uint32_t>(bainangua::MultiFrameCount));
 	vk::DescriptorPoolCreateInfo poolInfo(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, bainangua::MultiFrameCount, 1, &poolSize);
 
 	vk::DescriptorPool pool;
-	auto createResult = s.vkDevice.createDescriptorPool(&poolInfo, nullptr, &pool);
+	auto createResult = device.createDescriptorPool(&poolInfo, nullptr, &pool);
 	if (createResult != vk::Result::eSuccess) {
 		return formatVkResultError(std::string_view("Error in createDescriptorPool"), createResult);
 	}
 	return pool;
 }
 
-export auto createDescriptorSets(const VulkanContext& s, vk::DescriptorPool pool, vk::DescriptorSetLayout layout) -> bng_expected<std::vector<vk::DescriptorSet>> {
+export auto createDescriptorSets(vk::Device device, vk::DescriptorPool pool, vk::DescriptorSetLayout layout) -> bng_expected<std::vector<vk::DescriptorSet>> {
 	uint32_t descriptorSetCount = static_cast<uint32_t>(MultiFrameCount);
 	std::vector<vk::DescriptorSetLayout> layouts(descriptorSetCount, layout);
 	vk::DescriptorSetAllocateInfo allocInfo(pool, descriptorSetCount, layouts.data());
 	
 	
 	std::vector<vk::DescriptorSet> descriptorSets(descriptorSetCount);
-	auto allocResult = s.vkDevice.allocateDescriptorSets(&allocInfo, descriptorSets.data());
+	auto allocResult = device.allocateDescriptorSets(&allocInfo, descriptorSets.data());
 	if (allocResult != vk::Result::eSuccess)
 	{
 		return formatVkResultError(std::string_view("in createDescriptor sets"), allocResult);
@@ -56,13 +56,13 @@ export struct CreateSimpleDescriptorPoolStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 
 		vk::DescriptorPoolSize poolSize(descriptorType_, maxDescriptorCount_);
 		vk::DescriptorPoolCreateInfo poolInfo(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, maxDescriptorCount_, 1, &poolSize);
 
 		vk::DescriptorPool pool;
-		auto createResult = context.vkDevice.createDescriptorPool(&poolInfo, nullptr, &pool);
+		auto createResult = device.createDescriptorPool(&poolInfo, nullptr, &pool);
 		if (createResult != vk::Result::eSuccess) {
 			return formatVkResultError(std::string_view("Error in CreateSimpleDescriptorPoolStage"), createResult);
 		}
@@ -70,7 +70,7 @@ export struct CreateSimpleDescriptorPoolStage {
 		auto rWithPool = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("descriptorPool"), pool));
 		auto result = f.applyRow(rWithPool);
 
-		context.vkDevice.destroyDescriptorPool(pool);
+		device.destroyDescriptorPool(pool);
 
 		return result;
 	}
@@ -88,7 +88,7 @@ export struct CreateCombinedDescriptorPoolStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 
 		std::array<vk::DescriptorPoolSize, 2> poolSizes{
 			vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, maxDescriptorCount_),
@@ -98,7 +98,7 @@ export struct CreateCombinedDescriptorPoolStage {
 		vk::DescriptorPoolCreateInfo poolInfo(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, maxDescriptorCount_, poolSizes);
 
 		vk::DescriptorPool pool;
-		auto createResult = context.vkDevice.createDescriptorPool(&poolInfo, nullptr, &pool);
+		auto createResult = device.createDescriptorPool(&poolInfo, nullptr, &pool);
 		if (createResult != vk::Result::eSuccess) {
 			return formatVkResultError(std::string_view("Error in CreateSimpleDescriptorPoolStage"), createResult);
 		}
@@ -106,7 +106,7 @@ export struct CreateCombinedDescriptorPoolStage {
 		auto rWithPool = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("descriptorPool"), pool));
 		auto result = f.applyRow(rWithPool);
 
-		context.vkDevice.destroyDescriptorPool(pool);
+		device.destroyDescriptorPool(pool);
 
 		return result;
 	}
@@ -167,14 +167,14 @@ export struct CreateSimpleDescriptorSetsStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 		vk::DescriptorPool descriptorPool = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorPool"));
 
 		vk::DescriptorSetLayoutBinding uboLayoutBinding(0, descriptorType_, 1, shaderFlags_, nullptr);
 		vk::DescriptorSetLayoutCreateInfo layoutInfo({}, 1, &uboLayoutBinding);
 		vk::DescriptorSetLayout descriptorSetLayout;
 
-		vk::Result createResult = context.vkDevice.createDescriptorSetLayout(&layoutInfo, nullptr, &descriptorSetLayout);
+		vk::Result createResult = device.createDescriptorSetLayout(&layoutInfo, nullptr, &descriptorSetLayout);
 		if (createResult != vk::Result::eSuccess) {
 			return formatVkResultError("CreateSimpleDescriptorSetsStage: could not create descriptor set layout", createResult);
 		}
@@ -182,18 +182,18 @@ export struct CreateSimpleDescriptorSetsStage {
 		vk::DescriptorSetAllocateInfo allocInfo(descriptorPool, count_, layouts.data());
 
 		std::vector<vk::DescriptorSet> descriptorSets(count_);
-		auto allocResult = context.vkDevice.allocateDescriptorSets(&allocInfo, descriptorSets.data());
+		auto allocResult = device.allocateDescriptorSets(&allocInfo, descriptorSets.data());
 		if (allocResult != vk::Result::eSuccess)
 		{
-			context.vkDevice.destroyDescriptorSetLayout(descriptorSetLayout);
+			device.destroyDescriptorSetLayout(descriptorSetLayout);
 			return formatVkResultError("CreateSimpleDescriptorSetsStage: could not create descriptor sets", allocResult);
 		}
 
 		auto rWithSets = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("descriptorSets"), descriptorSets));
 		auto result = f.applyRow(rWithSets);
 
-		context.vkDevice.freeDescriptorSets(descriptorPool, count_, descriptorSets.data());
-		context.vkDevice.destroyDescriptorSetLayout(descriptorSetLayout);
+		device.freeDescriptorSets(descriptorPool, count_, descriptorSets.data());
+		device.destroyDescriptorSetLayout(descriptorSetLayout);
 
 		return result;
 	}
@@ -213,10 +213,10 @@ export struct CreateCombinedDescriptorSetsStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 		vk::DescriptorPool descriptorPool = boost::hana::at_key(r, BOOST_HANA_STRING("descriptorPool"));
 
-		auto createResult = createCombinedDescriptorSetLayout(context.vkDevice);
+		auto createResult = createCombinedDescriptorSetLayout(device);
 		if (!createResult) {
 			return tl::make_unexpected(createResult.error());
 		}
@@ -226,18 +226,18 @@ export struct CreateCombinedDescriptorSetsStage {
 		vk::DescriptorSetAllocateInfo allocInfo(descriptorPool, count_, layouts.data());
 
 		std::vector<vk::DescriptorSet> descriptorSets(count_);
-		auto allocResult = context.vkDevice.allocateDescriptorSets(&allocInfo, descriptorSets.data());
+		auto allocResult = device.allocateDescriptorSets(&allocInfo, descriptorSets.data());
 		if (allocResult != vk::Result::eSuccess)
 		{
-			context.vkDevice.destroyDescriptorSetLayout(descriptorSetLayout);
+			device.destroyDescriptorSetLayout(descriptorSetLayout);
 			return formatVkResultError("CreateSimpleDescriptorSetsStage: could not create descriptor sets", allocResult);
 		}
 
 		auto rWithSets = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("descriptorSets"), descriptorSets));
 		auto result = f.applyRow(rWithSets);
 	
-		context.vkDevice.freeDescriptorSets(descriptorPool, count_, descriptorSets.data());
-		context.vkDevice.destroyDescriptorSetLayout(descriptorSetLayout);
+		device.freeDescriptorSets(descriptorPool, count_, descriptorSets.data());
+		device.destroyDescriptorSetLayout(descriptorSetLayout);
 
 		return result;
 	}

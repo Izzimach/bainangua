@@ -16,34 +16,19 @@ import VulkanContext;
 #define SHADER_DIR ASSETS_DIR "/shaders"
 #define TEXTURES_DIR ASSETS_DIR "/textures"
 
-
-template <typename Result>
-inline auto wrapRenderLoop(std::string_view name, std::function<typename Result(bainangua::VulkanContext&)> renderLoop) -> typename Result {
-	return bainangua::createVulkanContext(
-		bainangua::VulkanContextConfig{
-			.AppName = std::string(name),
-			.requiredExtensions = {
-					VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
-					VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
-					VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-			},
-			.useValidation = false,
-		},
-		renderLoop
+constexpr auto testConfig() {
+	return boost::hana::make_map(
+		boost::hana::make_pair(
+			BOOST_HANA_STRING("config"),
+			bainangua::VulkanContextConfig{
+				.AppName = std::string("Test App"),
+				.requiredExtensions = {
+						VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
+						VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
+						VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
+				},
+				.useValidation = true
+			}
+		)
 	);
 }
-
-template <typename RowFunction>
-auto wrapRenderLoopRow(std::string_view name, RowFunction f) -> typename RowFunction::return_type {
-	return wrapRenderLoop<typename RowFunction::return_type>(
-		name,
-		[&](bainangua::VulkanContext& s) -> typename RowFunction::return_type {
-			auto r = boost::hana::make_map(
-				boost::hana::make_pair(BOOST_HANA_STRING("context"), s),
-				boost::hana::make_pair(BOOST_HANA_STRING("device"), s.vkDevice)
-			);
-			return f.applyRow(r);
-		}
-	);
-}
-

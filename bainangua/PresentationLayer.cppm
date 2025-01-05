@@ -26,11 +26,11 @@ struct SwapChainProperties
 	bainangua::bng_array<vk::PresentModeKHR> presentModes;
 };
 
-SwapChainProperties querySwapChainProperties(const bainangua::VulkanContext& boilerplate)
+SwapChainProperties querySwapChainProperties(vk::PhysicalDevice physicalDevice, vk::SurfaceKHR surface)
 {
-	vk::SurfaceCapabilitiesKHR capabilities = boilerplate.vkPhysicalDevice.getSurfaceCapabilitiesKHR(boilerplate.vkSurface);
-	std::vector<vk::SurfaceFormatKHR> formats = boilerplate.vkPhysicalDevice.getSurfaceFormatsKHR(boilerplate.vkSurface);
-	std::vector<vk::PresentModeKHR> presentModes = boilerplate.vkPhysicalDevice.getSurfacePresentModesKHR(boilerplate.vkSurface);
+	vk::SurfaceCapabilitiesKHR capabilities = physicalDevice.getSurfaceCapabilitiesKHR(surface);
+	std::vector<vk::SurfaceFormatKHR> formats = physicalDevice.getSurfaceFormatsKHR(surface);
+	std::vector<vk::PresentModeKHR> presentModes = physicalDevice.getSurfacePresentModesKHR(surface);
 
 	return SwapChainProperties(
 		capabilities,
@@ -38,14 +38,14 @@ SwapChainProperties querySwapChainProperties(const bainangua::VulkanContext& boi
 		bainangua::bng_array<vk::PresentModeKHR>(presentModes.begin(), presentModes.end()));
 }
 
-vk::Extent2D chooseSwapChainImageExtent(const bainangua::VulkanContext& boilerplate, const SwapChainProperties& swapChainProperties)
+vk::Extent2D chooseSwapChainImageExtent(GLFWwindow *glfwWindow, const SwapChainProperties& swapChainProperties)
 {
 	if (swapChainProperties.capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
 		return swapChainProperties.capabilities.currentExtent;
 	}
 	else {
 		int width, height;
-		glfwGetFramebufferSize(boilerplate.glfwWindow, &width, &height);
+		glfwGetFramebufferSize(glfwWindow, &width, &height);
 
 		const auto minExtent = swapChainProperties.capabilities.minImageExtent;
 		const auto maxExtent = swapChainProperties.capabilities.maxImageExtent;
@@ -75,6 +75,9 @@ export struct PresentationLayer
 {
 	PresentationLayer(
 		vk::Device device,
+		vk::PhysicalDevice physicalDevice,
+		vk::SurfaceKHR surface,
+		GLFWwindow *window,
 		vk::SwapchainKHR swapChain,
 		vk::Format swapChainFormat,
 		vk::Extent2D swapChainExtent2D,
@@ -86,7 +89,8 @@ export struct PresentationLayer
 		bng_array<vk::Image> swapChainImages,
 		bng_array<vk::ImageView> swapChainImageViews,
 		bng_array<vk::Framebuffer> swapChainFramebuffers
-		) : swapChainDevice_(device), swapChain_(swapChain), swapChainFormat_(swapChainFormat), swapChainExtent2D_(swapChainExtent2D),
+		) : device_(device), physicalDevice_(physicalDevice), surface_(surface), glfwWindow_(window),
+		    swapChain_(swapChain), swapChainFormat_(swapChainFormat), swapChainExtent2D_(swapChainExtent2D),
 	        swapChainImageCount_(swapChainImageCount), imageAvailableSemaphores_(imageAvailableSemaphores), renderFinishedSemaphores_(renderFinishedSemaphores),
 		    inFlightFences_(inFlightFences), swapChainImages_(swapChainImages), swapChainImageViews_(swapChainImageViews), swapChainFramebuffers_(swapChainFramebuffers)
 			{}
@@ -97,9 +101,14 @@ export struct PresentationLayer
 
 	void connectRenderPass(const vk::RenderPass& renderPass);
 
-	std::shared_ptr<PresentationLayer> rebuildSwapChain(const VulkanContext& s);
+	std::shared_ptr<PresentationLayer> rebuildSwapChain();
 
-	vk::Device swapChainDevice_;
+	// we need all this to rebuild the swapchain
+	vk::Device device_;
+	vk::PhysicalDevice physicalDevice_;
+	vk::SurfaceKHR surface_;
+	GLFWwindow* glfwWindow_;
+
 	vk::SwapchainKHR swapChain_;
 
 	vk::Format swapChainFormat_;
@@ -116,9 +125,9 @@ export struct PresentationLayer
 };
 
 
-export std::shared_ptr<PresentationLayer> buildPresentationLayer(const VulkanContext& boilerplate)
+export std::shared_ptr<PresentationLayer> buildPresentationLayer(vk::Device device, vk::PhysicalDevice physicalDevice, vk::SurfaceKHR surface, GLFWwindow *glfwWindow)
 {
-	SwapChainProperties swapChainInfo = querySwapChainProperties(boilerplate);
+	SwapChainProperties swapChainInfo = querySwapChainProperties(physicalDevice, surface);
 	auto useableFormat = std::find_if(swapChainInfo.formats.begin(), swapChainInfo.formats.end(), [](vk::SurfaceFormatKHR s) { return s.format == vk::Format::eB8G8R8A8Srgb && s.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear; });
 	auto useableModes = std::find_if(swapChainInfo.presentModes.begin(), swapChainInfo.presentModes.end(), [](vk::PresentModeKHR s) { return s == vk::PresentModeKHR::eFifo; });
 	
@@ -128,12 +137,12 @@ export std::shared_ptr<PresentationLayer> buildPresentationLayer(const VulkanCon
 	vk::SurfaceFormatKHR swapChainFormat = *useableFormat;
 
 	uint32_t swapChainImageCount = chooseSwapChainImageCount(swapChainInfo);
-	vk::Extent2D swapChainExtent2D = chooseSwapChainImageExtent(boilerplate, swapChainInfo);
+	vk::Extent2D swapChainExtent2D = chooseSwapChainImageExtent(glfwWindow, swapChainInfo);
 	std::vector<uint32_t> queueFamilies;
 
 	vk::SwapchainCreateInfoKHR createInfo(
 		vk::SwapchainCreateFlagsKHR(),
-		boilerplate.vkSurface,
+		surface,
 		swapChainImageCount,
 		swapChainFormat.format,
 		swapChainFormat.colorSpace,
@@ -146,9 +155,8 @@ export std::shared_ptr<PresentationLayer> buildPresentationLayer(const VulkanCon
 		vk::CompositeAlphaFlagBitsKHR::eOpaque,
 		vk::PresentModeKHR::eFifo,
 		true);
-	vk::Device swapChainDevice = boilerplate.vkDevice;
-	VkDevice swapChainVkDevice = static_cast<VkDevice>(swapChainDevice);
-	auto swapChain = boilerplate.vkDevice.createSwapchainKHR(createInfo);
+	VkDevice swapChainVkDevice = static_cast<VkDevice>(device);
+	auto swapChain = device.createSwapchainKHR(createInfo);
 
 	// get swapchain images
 	uint32_t imageCount;
@@ -172,7 +180,7 @@ export std::shared_ptr<PresentationLayer> buildPresentationLayer(const VulkanCon
 			immer::array<vk::ImageView, bainangua_memory_policy>(),
 			[&](immer::array<vk::ImageView, bainangua_memory_policy> vs, vk::Image img) {
 				vk::ImageViewCreateInfo viewInfo({}, img, vk::ImageViewType::e2D, swapChainFormat.format, vk::ComponentMapping(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1), nullptr);
-				vk::ImageView iv =  swapChainDevice.createImageView(viewInfo);
+				vk::ImageView iv =  device.createImageView(viewInfo);
 				return vs.push_back(iv);
 			});
 
@@ -181,15 +189,18 @@ export std::shared_ptr<PresentationLayer> buildPresentationLayer(const VulkanCon
 	immer::array<vk::Fence, bainangua_memory_policy> inFlightFences;
 
 	for (size_t index = 0; index < MultiFrameCount; index++) {
-		imageAvailableSemaphores = imageAvailableSemaphores.push_back(swapChainDevice.createSemaphore({}));
-		renderFinishedSemaphores = renderFinishedSemaphores.push_back(swapChainDevice.createSemaphore({}));
+		imageAvailableSemaphores = imageAvailableSemaphores.push_back(device.createSemaphore({}));
+		renderFinishedSemaphores = renderFinishedSemaphores.push_back(device.createSemaphore({}));
 
 		vk::FenceCreateInfo fenceInfo(vk::FenceCreateFlagBits::eSignaled);
-		inFlightFences = inFlightFences.push_back(swapChainDevice.createFence(fenceInfo));
+		inFlightFences = inFlightFences.push_back(device.createFence(fenceInfo));
 	}
 	
 	return std::make_shared<PresentationLayer>(
-		swapChainDevice,
+		device,
+		physicalDevice,
+		surface,
+		glfwWindow,
 		swapChain,
 
 		swapChainFormat.format,
@@ -216,7 +227,7 @@ void PresentationLayer::connectRenderPass(const vk::RenderPass& renderPass)
 			bng_array<vk::Framebuffer>(),
 			[&](auto vs, auto iv) {
 				vk::FramebufferCreateInfo framebufferInfo({}, renderPass, 1, &iv, swapChainExtent2D_.width, swapChainExtent2D_.height, 1);
-				vk::Framebuffer fb = swapChainDevice_.createFramebuffer(framebufferInfo);
+				vk::Framebuffer fb = device_.createFramebuffer(framebufferInfo);
 				return vs.push_back(fb);
 			});
 }
@@ -225,27 +236,27 @@ void PresentationLayer::teardownFramebuffers()
 {
 	std::for_each(swapChainFramebuffers_.begin(), swapChainFramebuffers_.end(),
 		[&](vk::Framebuffer f) {
-			swapChainDevice_.destroyFramebuffer(f);
+			device_.destroyFramebuffer(f);
 		});
 	swapChainFramebuffers_ = bng_array<vk::Framebuffer>();
 }
 
-std::shared_ptr<PresentationLayer> PresentationLayer::rebuildSwapChain(const VulkanContext &s)
+std::shared_ptr<PresentationLayer> PresentationLayer::rebuildSwapChain()
 {
-	s.vkDevice.waitIdle();
+	device_.waitIdle();
 
 	teardown();
 
-	return buildPresentationLayer(s);
+	return buildPresentationLayer(device_, physicalDevice_, surface_, glfwWindow_);
 }
 
 void PresentationLayer::teardown()
 {
-	if (swapChainDevice_ && swapChain_)
+	if (device_ && swapChain_)
 	{
-		std::ranges::for_each(imageAvailableSemaphores_, [&](auto s) { swapChainDevice_.destroySemaphore(s); });
-		std::ranges::for_each(renderFinishedSemaphores_, [&](auto s) { swapChainDevice_.destroySemaphore(s); });
-		std::ranges::for_each(inFlightFences_,           [&](auto f) { swapChainDevice_.destroyFence(f); });
+		std::ranges::for_each(imageAvailableSemaphores_, [&](auto s) { device_.destroySemaphore(s); });
+		std::ranges::for_each(renderFinishedSemaphores_, [&](auto s) { device_.destroySemaphore(s); });
+		std::ranges::for_each(inFlightFences_,           [&](auto f) { device_.destroyFence(f); });
 		imageAvailableSemaphores_ = bng_array<vk::Semaphore>();
 		renderFinishedSemaphores_ = bng_array<vk::Semaphore>();
 		inFlightFences_ = bng_array<vk::Fence>();
@@ -254,11 +265,11 @@ void PresentationLayer::teardown()
 
 		std::ranges::for_each(swapChainImageViews_,
 			[&](vk::ImageView iv) {
-				swapChainDevice_.destroyImageView(iv);
+				device_.destroyImageView(iv);
 			});
 		swapChainImageViews_ = bng_array<vk::ImageView>();
 
-		swapChainDevice_.destroySwapchainKHR(swapChain_);
+		device_.destroySwapchainKHR(swapChain_);
 		swapChain_ = VK_NULL_HANDLE;
 	}
 }
@@ -272,11 +283,12 @@ export struct PresentationLayerStage {
 
 	template <typename RowFunction, typename Row>
 	constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
-		static_assert(RowType::has_named_field<Row, BOOST_HANA_STRING("context"), VulkanContext>, "Row must have field named 'context'");
+		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+		vk::PhysicalDevice physicalDevice = boost::hana::at_key(r, BOOST_HANA_STRING("physicalDevice"));
+		vk::SurfaceKHR surface = boost::hana::at_key(r, BOOST_HANA_STRING("surface"));
+		GLFWwindow* glfwWindow = boost::hana::at_key(r, BOOST_HANA_STRING("glfwWindow"));
 
-		VulkanContext& context = boost::hana::at_key(r, BOOST_HANA_STRING("context"));
-
-		std::shared_ptr<PresentationLayer> presenterptr(buildPresentationLayer(context));
+		std::shared_ptr<PresentationLayer> presenterptr(buildPresentationLayer(device, physicalDevice, surface, glfwWindow));
 
 		auto rWithPresenter = boost::hana::insert(r, boost::hana::make_pair(BOOST_HANA_STRING("presenterptr"), presenterptr));
 		auto result = f.applyRow(rWithPresenter);
