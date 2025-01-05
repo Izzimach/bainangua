@@ -88,6 +88,8 @@ struct CreateShaderAsResource {
 	using return_type_transformer = WrappedReturnType;
 
 	template <typename RowFunction, typename Row>
+	requires     RowType::has_named_field<Row, BOOST_HANA_STRING("device"), vk::Device>
+			  && RowType::has_namedonly_field<Row, BOOST_HANA_STRING("resourceLoader")>
 	constexpr bng_expected<bool> wrapRowFunction(RowFunction f, Row r) {
 		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 		auto loader = boost::hana::at_key(r, BOOST_HANA_STRING("resourceLoader"));

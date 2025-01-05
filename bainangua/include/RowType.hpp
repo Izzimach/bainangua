@@ -23,8 +23,15 @@ namespace RowType {
 
 	template <typename Row, boost::hana::string FieldName, typename FieldType>
 	concept has_named_field = requires (Row s) {
-//		{ boost::hana::find(s, FieldName).value() } -> std::convertible_to<FieldType>;
 		{ boost::hana::at_key(s, FieldName) } -> std::convertible_to<FieldType>;
+	};
+
+	// If the type of a field is hard to derive or access, you may not be able to use
+	// has_named_field<>.  In that case you can still get some error checking of your row type by requiring a field of
+	// a specific name with an unconstrained type.
+	template <typename Row, boost::hana::string FieldName>
+	concept has_namedonly_field = requires (Row s) {
+		boost::hana::find(s, FieldName).value();
 	};
 
 	//
