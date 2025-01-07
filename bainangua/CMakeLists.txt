@@ -72,20 +72,6 @@ target_link_libraries(bainangua INTERFACE Boost::hana)
 target_link_libraries(bainangua PUBLIC libcoro)
 
 #
-# experimental stuff
-#
-
-add_library(experimental_lib "RowType.cpp")
-target_compile_features(experimental_lib PUBLIC cxx_std_20)
-
-target_include_directories(experimental_lib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
-
-target_link_libraries(experimental_lib PUBLIC glfw)
-target_link_libraries(experimental_lib PUBLIC immer)
-target_link_libraries(experimental_lib PUBLIC Vulkan::Vulkan)
-target_link_libraries(experimental_lib INTERFACE Boost::hana)
-
-#
 # shader compilation - shaders get compiled and put into assets/shaders in the build tree
 #
 
@@ -168,7 +154,6 @@ endif()
 
 target_link_libraries(white_pumpkin PRIVATE Vulkan::Vulkan)
 target_link_libraries(white_pumpkin PRIVATE bainangua)
-target_link_libraries(white_pumpkin PRIVATE experimental_lib)
 
 add_dependencies(white_pumpkin shaders)
 add_dependencies(white_pumpkin textures)

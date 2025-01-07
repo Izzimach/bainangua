@@ -14,6 +14,74 @@
 using namespace RowType;
 
 namespace RowTypeTests {
+	struct ZeroRowFunction {
+		using row_tag = RowFunctionTag;
+		using return_type = double;
+
+		template<typename Row>
+		constexpr double applyRow(Row) { return 0.0; }
+	};
+
+	template <typename V>
+	struct PullFromMapFunction {
+		using row_tag = RowFunctionTag;
+		using return_type = V;
+
+		template <typename Row>
+		constexpr V applyRow(Row r) {
+			return boost::hana::at_key(r, boost::hana::int_c<4>);
+		}
+	};
+
+
+	struct IdRowWrapper {
+		using row_tag = RowWrapperTag;
+
+		template <typename WrappedReturnType>
+		using return_type_transformer = WrappedReturnType;
+
+		template <typename RowFunction, typename Row>
+		constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+			return f.applyRow(r);
+		}
+	};
+
+	struct OnlyReturnStringWrapper {
+		using row_tag = RowWrapperTag;
+
+		template <typename WrappedReturnType>
+		using return_type_transformer = std::string;
+
+		template <typename RowFunction, typename Row>
+		constexpr std::string wrapRowFunction(RowFunction f, Row r) {
+			f.applyRow(r);
+			return std::string("argh");
+		}
+	};
+
+	struct AddOneRowWrapper {
+		using row_tag = RowWrapperTag;
+
+		template <typename WrappedReturnType>
+		using return_type_transformer = WrappedReturnType;
+
+		template <typename RowFunction, typename Row>
+		constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) { return 1 + f.applyRow(r); }
+	};
+
+	struct AddFieldWrapper {
+		using row_tag = RowWrapperTag;
+
+		template <typename WrappedReturnType>
+		using return_type_transformer = WrappedReturnType;
+
+		template <typename RowFunction, typename Row>
+		constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+			auto r2 = boost::hana::insert(r, boost::hana::make_pair(boost::hana::int_c<4>, 8.0f));
+			return f.applyRow(r2);
+		}
+	};
+
 
 	TEST_CASE("Basic RowType Tests", "[Basic][RowType]")
 	{
@@ -142,7 +210,4 @@ namespace RowTypeTests {
 		REQUIRE(onlyStringFn.applyRow(doubleRow) == std::string("argh"));
 
 	}
-
-
-
 }

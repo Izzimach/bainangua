@@ -214,9 +214,9 @@ struct InnerFunction {
 	using return_type = bainangua::bng_expected<bool>;
 
 	template <typename Row>
-		requires   RowType::has_named_field<Row, BOOST_HANA_STRING("device"), vk::Device>
-				&& RowType::has_named_field<Row, BOOST_HANA_STRING("commandBuffers"), std::vector<vk::CommandBuffer>>
-				&& RowType::has_named_field<Row, BOOST_HANA_STRING("graphicsFunnel"), std::shared_ptr<bainangua::CommandQueueFunnel>>
+	requires   RowType::has_named_field<Row, BOOST_HANA_STRING("device"), vk::Device>
+			&& RowType::has_named_field<Row, BOOST_HANA_STRING("commandBuffers"), std::vector<vk::CommandBuffer>>
+			&& RowType::has_named_field<Row, BOOST_HANA_STRING("graphicsFunnel"), std::shared_ptr<bainangua::CommandQueueFunnel>>
 	constexpr bainangua::bng_expected<bool> applyRow(Row r) {
 		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
 		std::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("commandBuffers"));
@@ -252,6 +252,7 @@ struct InnerFunction {
 	}
 };
 
+
 #ifdef NDEBUG
 int WINAPI wWinMain(HINSTANCE , HINSTANCE , PWSTR , int )
 #else
@@ -286,7 +287,7 @@ int main()
 		| bainangua::CreateQueueFunnels()
 		| bainangua::SimpleGraphicsCommandPoolStage()
 		| bainangua::PrimaryGraphicsCommandBuffersStage(1)
-		| InnerFunction();
+		| RowType::RowWrapLambda<bainangua::bng_expected<bool>>([](auto row) { return true; });
 
 	bainangua::bng_expected<bool> programResult = program.applyRow(config);
 
