@@ -399,6 +399,7 @@ struct FirstSwapchainPhysicalDevice {
 };
 
 export
+template <bool verbose>
 struct StandardVulkanInstance {
     using row_tag = RowType::RowWrapperTag;
 
@@ -406,7 +407,7 @@ struct StandardVulkanInstance {
     using return_type_transformer = WrappedReturnType;
 
     template <typename RowFunction, typename Row>
-    requires     RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig&>
+        requires     RowType::has_named_field<Row, BOOST_HANA_STRING("config"), VulkanContextConfig&>
     constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
         const VulkanContextConfig& config = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
 
@@ -419,16 +420,18 @@ struct StandardVulkanInstance {
         std::vector<const char*> rawExtensionStrings;
         std::ranges::for_each(totalExtensions.begin(), totalExtensions.end(), [&](const std::string& s) { rawExtensionStrings.push_back(s.c_str()); });
 
-        std::cout << std::format("total required extensions:\n");
-        for (uint32_t ix = 0; ix < rawExtensionStrings.size(); ix++) {
-            std::cout << std::format(" required: {}\n", rawExtensionStrings[ix]);
-        }
+        if (verbose) {
+            std::cout << std::format("total required extensions:\n");
+            for (uint32_t ix = 0; ix < rawExtensionStrings.size(); ix++) {
+                std::cout << std::format(" required: {}\n", rawExtensionStrings[ix]);
+            }
 
-        // dump list of available extensions
-        std::vector<vk::ExtensionProperties> vulkanExtensions = vk::enumerateInstanceExtensionProperties(nullptr);
-        std::cout << std::format("{} extensions supported\n", vulkanExtensions.size());
-        for (auto& prop : vulkanExtensions) {
-            std::cout << std::format("supported: {}\n", prop.extensionName.operator std::string());
+            // dump list of available extensions
+            std::vector<vk::ExtensionProperties> vulkanExtensions = vk::enumerateInstanceExtensionProperties(nullptr);
+            std::cout << std::format("{} extensions supported\n", vulkanExtensions.size());
+            for (auto& prop : vulkanExtensions) {
+                std::cout << std::format("supported: {}\n", prop.extensionName.operator std::string());
+            }
         }
 
         std::vector<vk::LayerProperties> vulkanLayers = vk::enumerateInstanceLayerProperties();
@@ -443,7 +446,7 @@ struct StandardVulkanInstance {
         if (config.useValidation) {
             totalLayers.emplace_back("VK_LAYER_KHRONOS_validation");
         }
-        
+
         // create an Instance
         vk::ApplicationInfo applicationInfo(config.AppName.c_str(), 1, config.EngineName.c_str(), 1, VK_API_VERSION_1_2);
         vk::InstanceCreateInfo instanceCreateInfo({}, &applicationInfo, totalLayers, rawExtensionStrings);
@@ -466,7 +469,7 @@ struct StandardVulkanInstance {
 
         auto rWithInstance = boost::hana::insert(r,
             boost::hana::make_pair(BOOST_HANA_STRING("instance"), instance)
-            );
+        );
         auto wrappedResult = f.applyRow(rWithInstance);
 
         // clean up debug callback - this has to be done before destroying the instance
@@ -534,7 +537,18 @@ struct GLFWOuterWrapper {
 export
 auto QuickCreateContext() {
     return GLFWOuterWrapper()
-        | StandardVulkanInstance()
+        | StandardVulkanInstance<false>()
+        | FirstSwapchainPhysicalDevice()
+        | CreateGLFWWindowAndSurface()
+        | StandardDevice()
+        | StandardVMAAllocator()
+        | EmptyEndFrameCallback();
+};
+
+export
+auto VerboseCreateContext() {
+    return GLFWOuterWrapper()
+        | StandardVulkanInstance<true>()
         | FirstSwapchainPhysicalDevice()
         | CreateGLFWWindowAndSurface()
         | StandardDevice()
