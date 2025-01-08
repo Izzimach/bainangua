@@ -266,6 +266,7 @@ int main()
 					VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
 					VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
 				},
+				.verboseInit = false,
 	#if NDEBUG
 				.useValidation = false,
 	#else
@@ -287,7 +288,39 @@ int main()
 		| bainangua::CreateQueueFunnels()
 		| bainangua::SimpleGraphicsCommandPoolStage()
 		| bainangua::PrimaryGraphicsCommandBuffersStage(1)
-		| RowType::RowWrapLambda<bainangua::bng_expected<bool>>([](auto row) { return true; });
+		| RowType::RowWrapLambda<bainangua::bng_expected<bool>>([](auto row) {
+			vk::Device device = boost::hana::at_key(row, BOOST_HANA_STRING("device"));
+			std::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(row, BOOST_HANA_STRING("commandBuffers"));
+			std::shared_ptr<bainangua::CommandQueueFunnel> graphicsQueue = boost::hana::at_key(row, BOOST_HANA_STRING("graphicsFunnel"));
+
+			vk::CommandBuffer cmd = commandBuffers[0];
+
+			vk::CommandBufferBeginInfo beginInfo({}, {});
+			cmd.begin(beginInfo);
+			cmd.end();
+
+			vk::SubmitInfo submit(0, nullptr, {}, 1, &cmd, 0, nullptr, nullptr);
+
+			coro::event e;
+
+			auto completionTask = [](coro::event& e) -> coro::task<void> {
+				e.set();
+				co_return;
+				};
+
+			auto awaiterTask = [](const coro::event& e) -> coro::task<void> {
+				co_await e;
+				co_return;
+				};
+
+			graphicsQueue->awaitCommand(submit, completionTask(e));
+
+			coro::sync_wait(awaiterTask(e));
+
+			device.waitIdle();
+
+			return true;
+		});
 
 	bainangua::bng_expected<bool> programResult = program.applyRow(config);
 

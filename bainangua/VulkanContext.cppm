@@ -41,6 +41,7 @@ struct VulkanContextConfig {
     std::string EngineName{ "Default Vulkan Engine" };
     std::vector<std::string> requiredExtensions;
 
+    bool verboseInit;
     bool useValidation;
 };
 
@@ -229,6 +230,7 @@ struct StandardDevice {
               && RowType::has_named_field<Row, BOOST_HANA_STRING("physicalDevice"), vk::PhysicalDevice>
               && RowType::has_named_field<Row, BOOST_HANA_STRING("surface"),        vk::SurfaceKHR>
     constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+        const VulkanContextConfig& config = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
         vk::Instance instance             = boost::hana::at_key(r, BOOST_HANA_STRING("instance"));
         vk::PhysicalDevice physicalDevice = boost::hana::at_key(r, BOOST_HANA_STRING("physicalDevice"));
         vk::SurfaceKHR surface            = boost::hana::at_key(r, BOOST_HANA_STRING("surface"));
@@ -242,7 +244,9 @@ struct StandardDevice {
         uint32_t graphicsQueueFamilyIndex = static_cast<uint32_t>(std::distance(queueFamilyProperties.begin(), graphicsQueueIterator));
         assert(graphicsQueueFamilyIndex < queueFamilyProperties.size());
 
-        std::cout << std::format("Graphics Queue family index={}\n", graphicsQueueFamilyIndex);
+        if (config.verboseInit) {
+            std::cout << std::format("Graphics Queue family index={}\n", graphicsQueueFamilyIndex);
+        }
 
         // find a queue to support presentation
         std::optional<uint32_t> presentQueueFamilyIndex;
@@ -358,19 +362,23 @@ struct FirstSwapchainPhysicalDevice {
     template <typename RowFunction, typename Row>
     requires     RowType::has_named_field<Row, BOOST_HANA_STRING("instance"), vk::Instance>
     constexpr RowFunction::return_type wrapRowFunction(RowFunction f, Row r) {
+        const VulkanContextConfig& config = boost::hana::at_key(r, BOOST_HANA_STRING("config"));
         vk::Instance instance = boost::hana::at_key(r, BOOST_HANA_STRING("instance"));
 
         // enumerate the physicalDevices
         std::vector<vk::PhysicalDevice> physicalDevices = instance.enumeratePhysicalDevices();
 
         // filter out devices that don't support a swapchain or anisotropy
-        auto deviceIsSuitable= [](vk::PhysicalDevice device) {
+        bool verbose = config.verboseInit;
+        auto deviceIsSuitable= [verbose](vk::PhysicalDevice device) {
             // check device extensions
             std::vector<vk::ExtensionProperties> deviceProperties = device.enumerateDeviceExtensionProperties();
-            std::cout << std::format("{} device properties supported\n", deviceProperties.size());
-            for (auto& prop : deviceProperties)
-            {
-                std::cout << std::format("property: {}\n", prop.extensionName.operator std::string());
+            if (verbose) {
+                std::cout << std::format("{} device properties supported\n", deviceProperties.size());
+                for (auto& prop : deviceProperties)
+                {
+                    std::cout << std::format("property: {}\n", prop.extensionName.operator std::string());
+                }
             }
             bool supportsSwapchain =
                 (std::ranges::find_if(deviceProperties,
@@ -378,7 +386,7 @@ struct FirstSwapchainPhysicalDevice {
                         std::string e = p.extensionName;
                         return e == std::string(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
                     }) != deviceProperties.end());
-            std::cout << std::format("device supports swapchain = {}\n", supportsSwapchain);
+            if (verbose) { std::cout << std::format("device supports swapchain = {}\n", supportsSwapchain); }
 
             vk::PhysicalDeviceFeatures supportedFeatures(device.getFeatures());
             return supportsSwapchain && supportedFeatures.samplerAnisotropy;
@@ -399,7 +407,6 @@ struct FirstSwapchainPhysicalDevice {
 };
 
 export
-template <bool verbose>
 struct StandardVulkanInstance {
     using row_tag = RowType::RowWrapperTag;
 
@@ -420,7 +427,7 @@ struct StandardVulkanInstance {
         std::vector<const char*> rawExtensionStrings;
         std::ranges::for_each(totalExtensions.begin(), totalExtensions.end(), [&](const std::string& s) { rawExtensionStrings.push_back(s.c_str()); });
 
-        if (verbose) {
+        if (config.verboseInit) {
             std::cout << std::format("total required extensions:\n");
             for (uint32_t ix = 0; ix < rawExtensionStrings.size(); ix++) {
                 std::cout << std::format(" required: {}\n", rawExtensionStrings[ix]);
@@ -504,6 +511,13 @@ struct GLFWOuterWrapper {
         uint32_t glfwExtensionCount;
         const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
+        if (config.verboseInit) {
+            std::cout << std::format("{} extensions required by glfw\n", glfwExtensionCount);
+            for (uint32_t ix = 0; ix < glfwExtensionCount; ix++) {
+                std::cout << std::format(" required: {}\n", glfwExtensions[ix]);
+            }
+        }
+
         std::vector<std::string> totalExtensions = config.requiredExtensions;
         std::ranges::for_each(glfwExtensions, glfwExtensions + glfwExtensionCount,
             [&](auto x) { 
@@ -511,11 +525,6 @@ struct GLFWOuterWrapper {
                     totalExtensions.emplace_back(x);
                 }
             });
-
-        std::cout << std::format("{} extensions required by glfw\n", glfwExtensionCount);
-        for (uint32_t ix = 0; ix < glfwExtensionCount; ix++) {
-            std::cout << std::format(" required: {}\n", glfwExtensions[ix]);
-        }
 
         // create a new config with the updated extensions, then add it to the row
         VulkanContextConfig updatedConfig = config;
@@ -537,18 +546,7 @@ struct GLFWOuterWrapper {
 export
 auto QuickCreateContext() {
     return GLFWOuterWrapper()
-        | StandardVulkanInstance<false>()
-        | FirstSwapchainPhysicalDevice()
-        | CreateGLFWWindowAndSurface()
-        | StandardDevice()
-        | StandardVMAAllocator()
-        | EmptyEndFrameCallback();
-};
-
-export
-auto VerboseCreateContext() {
-    return GLFWOuterWrapper()
-        | StandardVulkanInstance<true>()
+        | StandardVulkanInstance()
         | FirstSwapchainPhysicalDevice()
         | CreateGLFWWindowAndSurface()
         | StandardDevice()

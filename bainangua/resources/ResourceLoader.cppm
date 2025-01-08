@@ -145,7 +145,6 @@ public:
         // some unloads might still be queued, wait for them to finish
         coro::sync_wait(autoTasks_.garbage_collect_and_yield_until_empty());
         tp_->shutdown();
-        std::cout << "ResourceLoader destructor\n";
     }
 
     size_t measureLoad() {
