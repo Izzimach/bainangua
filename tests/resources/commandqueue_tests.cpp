@@ -21,53 +21,37 @@ import ResourceLoader;
 import Commands;
 import CommandQueue;
 
+template <int loop_count>
+auto basicCommandQueueTest = [](auto r) -> bainangua::bng_expected<bool> {
+	vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
+	std::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("commandBuffers"));
+	std::shared_ptr<bainangua::CommandQueueFunnel> graphicsFunnel = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsFunnel"));
 
-struct BasicCommandQueueTest {
-	BasicCommandQueueTest(unsigned int c) : loop_count_(c) {}
+	vk::CommandBuffer cmd = commandBuffers[0];
 
-	unsigned int loop_count_;
+	vk::CommandBufferBeginInfo beginInfo({}, {});
+	cmd.begin(beginInfo);
+	cmd.end();
 
-	using row_tag = RowType::RowFunctionTag;
-	using return_type = bainangua::bng_expected<bool>;
+	vk::SubmitInfo submit(0, nullptr, {}, 1, &cmd, 0, nullptr, nullptr);
 
-	template <typename Row>
-	constexpr bainangua::bng_expected<bool> applyRow(Row r) {
-		vk::Device device = boost::hana::at_key(r, BOOST_HANA_STRING("device"));
-		std::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(r, BOOST_HANA_STRING("commandBuffers"));
-		std::shared_ptr<bainangua::CommandQueueFunnel> graphicsQueue = boost::hana::at_key(r, BOOST_HANA_STRING("graphicsFunnel"));
+	// a single thread to queue onto when we return from the awaitCommand
+	coro::thread_pool local_thread{ coro::thread_pool::options{1} };
 
-		vk::CommandBuffer cmd = commandBuffers[0];
-
-		vk::CommandBufferBeginInfo beginInfo({}, {});
-		cmd.begin(beginInfo);
-		cmd.end();
-
-		vk::SubmitInfo submit(0, nullptr, {}, 1, &cmd, 0, nullptr, nullptr);
-
-		coro::event e;
-
-		auto completionTask = [](coro::event& e) -> coro::task<void> {
-			e.set();
-			co_return;
-		};
-
-		auto awaiterTask = [](const coro::event& e) -> coro::task<void> {
-			co_await e;
-			co_return;
-		};
-
-		for (unsigned ix = 0; ix < loop_count_; ix++) {
-			graphicsQueue->awaitCommand(submit, completionTask(e));
-
-			coro::sync_wait(awaiterTask(e));
-
-			e.reset();
+	auto frameTask = [](const vk::SubmitInfo& submit, std::shared_ptr<bainangua::CommandQueueFunnel> graphicsFunnel, coro::thread_pool &thread) -> coro::task<void> {
+		for (unsigned ix = 0; ix < loop_count; ix++) {
+			co_await graphicsFunnel->awaitCommand(submit);
+			co_await thread.schedule();
 		}
 
-		device.waitIdle();
+		co_return;
+	};
 
-		return true;
-	}
+	coro::sync_wait(frameTask(submit, graphicsFunnel, local_thread));
+
+	device.waitIdle();
+
+	return true;
 };
 
 
@@ -78,7 +62,7 @@ TEST_CASE("CommandQueue", "[CommandQueue]")
 		| bainangua::CreateQueueFunnels()
 		| bainangua::SimpleGraphicsCommandPoolStage()
 		| bainangua::PrimaryGraphicsCommandBuffersStage(1)
-		| BasicCommandQueueTest(1);
+		| RowType::RowWrapLambda<bainangua::bng_expected<bool>>(basicCommandQueueTest<1>);
 
 	REQUIRE(program.applyRow(testConfig()) == bainangua::bng_expected<bool>(true));
 
@@ -87,7 +71,7 @@ TEST_CASE("CommandQueue", "[CommandQueue]")
 		| bainangua::CreateQueueFunnels()
 		| bainangua::SimpleGraphicsCommandPoolStage()
 		| bainangua::PrimaryGraphicsCommandBuffersStage(1)
-		| BasicCommandQueueTest(10);
+		| RowType::RowWrapLambda<bainangua::bng_expected<bool>>(basicCommandQueueTest<10>);
 
 	REQUIRE(program10.applyRow(testConfig()) == bainangua::bng_expected<bool>(true));
 

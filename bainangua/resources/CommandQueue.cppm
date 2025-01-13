@@ -45,12 +45,12 @@ public:
 		}
 	}
 
-	void submitCommand(vk::SubmitInfo &b) {
+	void submitCommand(const vk::SubmitInfo &b) {
 		std::scoped_lock<std::mutex> accessLock(access_mutex_);
 		queue_.submit(b, VK_NULL_HANDLE);
 	}
 
-	auto asyncCommand(vk::SubmitInfo& b, coro::task<void> waiter) -> bng_expected<void> {
+	auto asyncCommand(const vk::SubmitInfo& b, coro::task<void> waiter) -> bng_expected<void> {
 		{
 			std::scoped_lock accessLock(access_mutex_);
 
@@ -66,7 +66,7 @@ public:
 		return {};
 	}
 
-	auto awaitCommand(vk::SubmitInfo& b) -> coro::task<bng_expected<void>> {
+	auto awaitCommand(const vk::SubmitInfo& b) -> coro::task<bng_expected<void>> {
 		coro::event e;
 
 		auto completionTask = [](coro::event& e) -> coro::task<void> {
@@ -99,10 +99,6 @@ private:
 			fence_pool_.pop_back();
 			return f;
 		}
-	}
-
-	auto releaseFence(vk::Fence releaseme) -> void {
-		fence_pool_.push_back(releaseme);
 	}
 
 	void fence_reactor() {
