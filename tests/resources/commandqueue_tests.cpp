@@ -40,8 +40,7 @@ auto basicCommandQueueTest = [](auto r) -> bainangua::bng_expected<bool> {
 
 	auto frameTask = [](const vk::SubmitInfo& submit, std::shared_ptr<bainangua::CommandQueueFunnel> graphicsFunnel, coro::thread_pool &thread) -> coro::task<void> {
 		for (unsigned ix = 0; ix < loop_count; ix++) {
-			co_await graphicsFunnel->awaitCommand(submit);
-			co_await thread.schedule();
+			co_await graphicsFunnel->awaitCommand(submit, thread);
 		}
 
 		co_return;

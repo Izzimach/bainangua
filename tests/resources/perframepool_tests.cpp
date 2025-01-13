@@ -40,7 +40,10 @@ TEST_CASE("PerFramePool", "[PerFramePool][Basic]")
 			std::shared_ptr<bainangua::PerFramePool> perFramePool = boost::hana::at_key(row, BOOST_HANA_STRING("perFramePool"));
 			std::shared_ptr<bainangua::CommandQueueFunnel> graphicsQueue = boost::hana::at_key(row, BOOST_HANA_STRING("graphicsFunnel"));
 
-			auto runFrame = [](auto perFramePool, auto graphicsQueue) -> coro::task<void> {
+			// a single thread to queue onto when we return from the awaitCommand
+			coro::thread_pool local_thread{ coro::thread_pool::options{1} };
+
+			auto runFrame = [](auto perFramePool, auto graphicsQueue, coro::thread_pool &pool) -> coro::task<void> {
 				auto pfdResult = co_await perFramePool->acquirePerFrameData();
 				if (!pfdResult) { co_return; }
 				std::shared_ptr<bainangua::PerFramePool::PerFrameData> pfd = pfdResult.value();
@@ -55,14 +58,14 @@ TEST_CASE("PerFramePool", "[PerFramePool][Basic]")
 
 				vk::SubmitInfo submit(0, nullptr, {}, 1, &cmd, 0, nullptr, nullptr);
 
-				co_await graphicsQueue->awaitCommand(submit);
+				co_await graphicsQueue->awaitCommand(submit, pool);
 
 				co_await perFramePool->releasePerFrameData(pfd);
 
 				co_return;
 				};
 
-			coro::sync_wait(runFrame(perFramePool, graphicsQueue));
+			coro::sync_wait(runFrame(perFramePool, graphicsQueue, local_thread));
 
 			device.waitIdle();
 

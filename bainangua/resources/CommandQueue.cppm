@@ -45,11 +45,31 @@ public:
 		}
 	}
 
-	void submitCommand(const vk::SubmitInfo &b) {
-		std::scoped_lock<std::mutex> accessLock(access_mutex_);
-		queue_.submit(b, VK_NULL_HANDLE);
-	}
+	// Submit a command buffer to the queue and provide an awaitable. The coroutine will resume once this command is completed
+	// on the GPU (detected using a vkFence). Since this will cause thread jumping
+	// you need to also submit a thread_pool where the coroutine will get scheduled once the command buffer is finished.
+	auto awaitCommand(const vk::SubmitInfo& b, coro::thread_pool &resume_on) -> coro::task<bng_expected<void>> {
+		coro::event e;
 
+		auto completionTask = [](coro::event& e) -> coro::task<void> {
+			e.set();
+			co_return;
+			};
+
+		auto result = asyncCommand(b, std::move(completionTask(e)));
+		if (result) {
+			co_await e;
+			// because of the way that libcoro events work, at this point we're in the fence reactor thread.
+			// so re-queue up the coroutine into it's original thread pool (or at least the thread pool that
+			// was passed in!)
+			co_await resume_on.schedule();
+			co_return{};
+		}
+
+		co_return result;
+	}
+	
+private:
 	auto asyncCommand(const vk::SubmitInfo& b, coro::task<void> waiter) -> bng_expected<void> {
 		{
 			std::scoped_lock accessLock(access_mutex_);
@@ -66,24 +86,6 @@ public:
 		return {};
 	}
 
-	auto awaitCommand(const vk::SubmitInfo& b) -> coro::task<bng_expected<void>> {
-		coro::event e;
-
-		auto completionTask = [](coro::event& e) -> coro::task<void> {
-			e.set();
-			co_return;
-			};
-
-		auto result = asyncCommand(b, std::move(completionTask(e)));
-		if (result) {
-			co_await e;
-			co_return{};
-		}
-
-		co_return result;
-	}
-
-private:
 	// MAKE SURE you have the access_mutex_ locked when calling this
 	auto acquireFence() -> bng_expected<vk::Fence> {
 		if (fence_pool_.empty()) {
