@@ -152,6 +152,8 @@ namespace RowType {
 		return LambdaRowFunction<RetType, TemplateLambda>(l);
 	}
 
+
+
 }
 
 // pipe composition is global, we'll avoid overload collision with concepts

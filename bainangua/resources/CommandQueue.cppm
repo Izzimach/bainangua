@@ -50,7 +50,7 @@ public:
 		queue_.submit(b, VK_NULL_HANDLE);
 	}
 
-	auto awaitCommand(vk::SubmitInfo& b, coro::task<void> waiter) -> bng_expected<void> {
+	auto asyncCommand(vk::SubmitInfo& b, coro::task<void> waiter) -> bng_expected<void> {
 		{
 			std::scoped_lock accessLock(access_mutex_);
 
@@ -64,6 +64,23 @@ public:
 		// mutex is unlocked at this point
 		work_available_.notify_one();
 		return {};
+	}
+
+	auto awaitCommand(vk::SubmitInfo& b) -> coro::task<bng_expected<void>> {
+		coro::event e;
+
+		auto completionTask = [](coro::event& e) -> coro::task<void> {
+			e.set();
+			co_return;
+			};
+
+		auto result = asyncCommand(b, std::move(completionTask(e)));
+		if (result) {
+			co_await e;
+			co_return{};
+		}
+
+		co_return result;
 	}
 
 private:
@@ -144,6 +161,9 @@ private:
 	std::thread fence_awaiter_thread_;
 };
 
+/**
+* Creates two CommandQueueFunnels, 'graphicsFunnel' and 'presentFunnel'
+*/
 export
 struct CreateQueueFunnels {
 

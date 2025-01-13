@@ -45,6 +45,7 @@ import Shader;
 import StagingBuffer;
 import VertexBuffer;
 import CommandQueue;
+import PerFramePool;
 
 void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, vk::Extent2D swapChainExtent, const bainangua::PipelineBundle &pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer, vk::DescriptorSet uboDescriptorSet) {
 	vk::CommandBufferBeginInfo beginInfo({}, {});
@@ -286,36 +287,35 @@ int main()
 		bainangua::QuickCreateContext()
 		| bainangua::ResourceLoaderStage(loaderDirectory, loaderStorage)
 		| bainangua::CreateQueueFunnels()
-		| bainangua::SimpleGraphicsCommandPoolStage()
-		| bainangua::PrimaryGraphicsCommandBuffersStage(1)
+		| bainangua::CreatePerFramePool()
 		| RowType::RowWrapLambda<bainangua::bng_expected<bool>>([](auto row) {
 			vk::Device device = boost::hana::at_key(row, BOOST_HANA_STRING("device"));
-			std::vector<vk::CommandBuffer> commandBuffers = boost::hana::at_key(row, BOOST_HANA_STRING("commandBuffers"));
+			std::shared_ptr<bainangua::PerFramePool> perFramePool = boost::hana::at_key(row, BOOST_HANA_STRING("perFramePool"));
 			std::shared_ptr<bainangua::CommandQueueFunnel> graphicsQueue = boost::hana::at_key(row, BOOST_HANA_STRING("graphicsFunnel"));
 
-			vk::CommandBuffer cmd = commandBuffers[0];
+			auto runFrame = [](auto perFramePool, auto graphicsQueue) -> coro::task<void> {
+				auto pfdResult = co_await perFramePool->acquirePerFrameData();
+				if (!pfdResult) { co_return; }
+				std::shared_ptr<bainangua::PerFramePool::PerFrameData> pfd = pfdResult.value();
 
-			vk::CommandBufferBeginInfo beginInfo({}, {});
-			cmd.begin(beginInfo);
-			cmd.end();
+				auto cmdResult = co_await pfd->acquireCommandBuffer();
+				if (!cmdResult) { co_return; }
+				vk::CommandBuffer cmd = cmdResult.value();
 
-			vk::SubmitInfo submit(0, nullptr, {}, 1, &cmd, 0, nullptr, nullptr);
+				vk::CommandBufferBeginInfo beginInfo({}, {});
+				cmd.begin(beginInfo);
+				cmd.end();
 
-			coro::event e;
+				vk::SubmitInfo submit(0, nullptr, {}, 1, &cmd, 0, nullptr, nullptr);
 
-			auto completionTask = [](coro::event& e) -> coro::task<void> {
-				e.set();
+				co_await graphicsQueue->awaitCommand(submit);
+
+				co_await perFramePool->releasePerFrameData(pfd);
+
 				co_return;
-				};
+			}(perFramePool, graphicsQueue);
 
-			auto awaiterTask = [](const coro::event& e) -> coro::task<void> {
-				co_await e;
-				co_return;
-				};
-
-			graphicsQueue->awaitCommand(submit, completionTask(e));
-
-			coro::sync_wait(awaiterTask(e));
+			coro::sync_wait(runFrame);
 
 			device.waitIdle();
 
