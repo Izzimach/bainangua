@@ -293,7 +293,9 @@ int main()
 			std::shared_ptr<bainangua::PerFramePool> perFramePool = boost::hana::at_key(row, BOOST_HANA_STRING("perFramePool"));
 			std::shared_ptr<bainangua::CommandQueueFunnel> graphicsQueue = boost::hana::at_key(row, BOOST_HANA_STRING("graphicsFunnel"));
 
-			auto runFrame = [](auto perFramePool, auto graphicsQueue) -> coro::task<void> {
+			coro::thread_pool worker_thread({ .thread_count = 1 });
+
+			auto runFrame = [](auto perFramePool, auto graphicsQueue, coro::thread_pool &worker_thread) -> coro::task<void> {
 				auto pfdResult = co_await perFramePool->acquirePerFrameData();
 				if (!pfdResult) { co_return; }
 				std::shared_ptr<bainangua::PerFramePool::PerFrameData> pfd = pfdResult.value();
@@ -308,12 +310,12 @@ int main()
 
 				vk::SubmitInfo submit(0, nullptr, {}, 1, &cmd, 0, nullptr, nullptr);
 
-				co_await graphicsQueue->awaitCommand(submit);
+				co_await graphicsQueue->awaitCommand(submit, worker_thread);
 
 				co_await perFramePool->releasePerFrameData(pfd);
 
 				co_return;
-			}(perFramePool, graphicsQueue);
+			}(perFramePool, graphicsQueue, worker_thread);
 
 			coro::sync_wait(runFrame);
 

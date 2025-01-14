@@ -45,47 +45,45 @@ public:
 		}
 	}
 
+	// Queue a command but don't immediately wait for it to finish on the GPU. Provides a coro::event that will
+	// get signaled when the command finished on the GPU, for you to use later on (or not).
+	// Note that after co_await-ing on this coro::event your coroutine will be on the fence_reactor thread,
+	// so it's a good idea to immediately requeue onto whatever thread_pool your coroutine was originally on.
+	auto asyncCommand(const vk::SubmitInfo& b) -> bng_expected<std::shared_ptr<coro::event>> {
+		std::scoped_lock accessLock(access_mutex_);
+
+		bng_expected<vk::Fence> awaitingFence = acquireFence();
+		if (!awaitingFence) {
+			return bng_unexpected(awaitingFence.error());
+		}
+
+		std::shared_ptr<coro::event> event_ptr = std::make_shared<coro::event>();
+		queue_.submit(b, awaitingFence.value());
+		fence_waiters_.emplace_back(std::make_pair(awaitingFence.value(), event_ptr));
+
+		work_available_.notify_one();
+		return event_ptr;
+	}
+	
 	// Submit a command buffer to the queue and provide an awaitable. The coroutine will resume once this command is completed
 	// on the GPU (detected using a vkFence). Since this will cause thread jumping
 	// you need to also submit a thread_pool where the coroutine will get scheduled once the command buffer is finished.
 	auto awaitCommand(const vk::SubmitInfo& b, coro::thread_pool &resume_on) -> coro::task<bng_expected<void>> {
-		coro::event e;
 
-		auto completionTask = [](coro::event& e) -> coro::task<void> {
-			e.set();
-			co_return;
-			};
-
-		auto result = asyncCommand(b, std::move(completionTask(e)));
+		auto result = asyncCommand(b);
 		if (result) {
-			co_await e;
+			co_await (result.value())->operator co_await();
 			// because of the way that libcoro events work, at this point we're in the fence reactor thread.
 			// so re-queue up the coroutine into it's original thread pool (or at least the thread pool that
 			// was passed in!)
 			co_await resume_on.schedule();
 			co_return{};
 		}
-
-		co_return result;
+		else
+			co_return bng_unexpected(result.error());
 	}
 	
 private:
-	auto asyncCommand(const vk::SubmitInfo& b, coro::task<void> waiter) -> bng_expected<void> {
-		{
-			std::scoped_lock accessLock(access_mutex_);
-
-			bng_expected<vk::Fence> awaitingFence = acquireFence();
-			if (!awaitingFence) {
-				return bng_unexpected(awaitingFence.error());
-			}
-			queue_.submit(b, awaitingFence.value());
-			fence_waiters_.emplace_back(std::make_pair(awaitingFence.value(), std::move(waiter)));
-		}
-		// mutex is unlocked at this point
-		work_available_.notify_one();
-		return {};
-	}
-
 	// MAKE SURE you have the access_mutex_ locked when calling this
 	auto acquireFence() -> bng_expected<vk::Fence> {
 		if (fence_pool_.empty()) {
@@ -131,8 +129,9 @@ private:
 				if (device_.getFenceStatus(f) == vk::Result::eSuccess) {
 					auto waiter = std::find_if(fence_waiters_.begin(), fence_waiters_.end(), [f](auto& x) { return x.first == f; });
 					if (waiter != fence_waiters_.end()) {
-						// run the completion handler
-						coro::sync_wait(waiter->second);
+						// trigger the coro::event used for this fence
+						waiter->second->set();
+
 						// remove from the vector of waiters
 						fence_waiters_.erase(waiter, waiter + 1);
 						fence_pool_.push_back(f);
@@ -154,7 +153,7 @@ private:
 	vk::Device device_;
 	vk::Queue queue_;
 	std::vector<vk::Fence> fence_pool_;
-	std::vector<std::pair<vk::Fence, coro::task<void>>> fence_waiters_;
+	std::vector<std::pair<vk::Fence, std::shared_ptr<coro::event>>> fence_waiters_;
 	std::atomic<bool> cleanup_time_{ false };
 	std::thread fence_awaiter_thread_;
 };
