@@ -46,6 +46,7 @@ import StagingBuffer;
 import VertexBuffer;
 import CommandQueue;
 import PerFramePool;
+import Buffers;
 
 void recordCommandBuffer(vk::CommandBuffer buffer, vk::Framebuffer swapChainImage, vk::Extent2D swapChainExtent, const bainangua::PipelineBundle &pipeline, VkBuffer vertexBuffer, VkBuffer indexBuffer, vk::DescriptorSet uboDescriptorSet) {
 	vk::CommandBufferBeginInfo beginInfo({}, {});
@@ -292,10 +293,11 @@ int main()
 			vk::Device device = boost::hana::at_key(row, BOOST_HANA_STRING("device"));
 			std::shared_ptr<bainangua::PerFramePool> perFramePool = boost::hana::at_key(row, BOOST_HANA_STRING("perFramePool"));
 			std::shared_ptr<bainangua::CommandQueueFunnel> graphicsQueue = boost::hana::at_key(row, BOOST_HANA_STRING("graphicsFunnel"));
+			VmaAllocator vma = boost::hana::at_key(row, BOOST_HANA_STRING("vmaAllocator"));
 
 			coro::thread_pool worker_thread({ .thread_count = 1 });
 
-			auto runFrame = [](auto perFramePool, auto graphicsQueue, coro::thread_pool &worker_thread) -> coro::task<void> {
+			auto runFrame = [](auto perFramePool, auto graphicsQueue, VmaAllocator vma, coro::thread_pool& worker_thread) -> coro::task<void> {
 				auto pfdResult = co_await perFramePool->acquirePerFrameData();
 				if (!pfdResult) { co_return; }
 				std::shared_ptr<bainangua::PerFramePool::PerFrameData> pfd = pfdResult.value();
@@ -304,18 +306,20 @@ int main()
 				if (!cmdResult) { co_return; }
 				vk::CommandBuffer cmd = cmdResult.value();
 
-				vk::CommandBufferBeginInfo beginInfo({}, {});
-				cmd.begin(beginInfo);
-				cmd.end();
-
-				vk::SubmitInfo submit(0, nullptr, {}, 1, &cmd, 0, nullptr, nullptr);
-
-				co_await graphicsQueue->awaitCommand(submit, worker_thread);
+				std::array vertData{ 1.0f,2.0f,3.0f };
+				auto stagingBuffer = bainangua::allocateStagingBuffer(vma, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(vertData));
+				if (stagingBuffer) {
+					auto GPUbuf = co_await bainangua::allocateStaticGPUBuffer(vma, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertData.data(), sizeof(vertData), stagingBuffer.value(), cmd, graphicsQueue, worker_thread);
+					if (GPUbuf) {
+						GPUbuf.value().release();
+					}
+					stagingBuffer.value().release();
+				}
 
 				co_await perFramePool->releasePerFrameData(pfd);
 
 				co_return;
-			}(perFramePool, graphicsQueue, worker_thread);
+			}(perFramePool, graphicsQueue, vma, worker_thread);
 
 			coro::sync_wait(runFrame);
 
